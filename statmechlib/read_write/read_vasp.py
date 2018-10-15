@@ -1,0 +1,373 @@
+import os
+import re
+import numpy as np
+import glob
+
+def read_poscar(filename):
+    """
+    Reads VASP POSCAR and CONTCAR files
+
+    Parameters
+    ----------
+    filename: str
+              full path and name of the POSCAR
+
+    Returns
+    -------
+    traj: dict
+          trajectory information with keys given below
+    box: 3x3 ndarray
+         Box dimensions
+    xyz: natom x 3 ndarray
+         Atomic configuration
+    atom_type: list of str
+                atom types (names)
+    atom_num: list of ints
+                atom numbers for each type
+    """
+
+    with open(filename, 'r') as fc:
+        
+        # atom names
+        atom_types = [name for name in re.findall('\S+', fc.readline())]
+
+        scale = float(re.findall('\S+', fc.readline())[0])
+            
+        # box parameters
+        box = np.empty((3, 3), dtype=float)
+        for i in range(3):
+            box[i,:] = [float(x)*scale for x in re.findall('\S+', fc.readline())]
+
+        # atom names (again, should be same as above)
+        atom_types = [name for name in re.findall('\S+', fc.readline())]
+
+        # number of atoms
+        atom_nums = [int(num) for num in re.findall('\S+', fc.readline())]
+        nat = sum(atom_nums)
+
+        line = fc.readline()
+            
+        # atomic configuration
+        xyz = np.empty((nat, 3), dtype=float)
+        for i in range(nat):
+            xyz[i] = [float(x) for x in re.findall('\S+', fc.readline())]
+            
+    traj = {'box0':box, 'xyz0':xyz, 'atom_type':atom_types, 'atom_num':atom_nums}
+
+    return traj
+
+
+
+def read_xdatcar(filename):
+    """
+    Reads VASP XDATCAR
+
+    Parameters
+    ----------
+    filename: str
+              full path and name of the XDATCAR
+
+    Returns
+    -------
+    traj: dict
+          trajectory information with keys given below
+    box: list of 3x3 ndarrays
+          Box dimensions
+    xyz: list of natom x 3 ndarrays
+          Atomic configurations
+    atom_type: list of str
+                atom types (names)
+    atom_num: list of ints
+                atom numbers for each type
+    """
+
+    with open(filename, 'r') as fc:
+
+        xyzs = [] ; boxs = []
+
+        for line in iter(fc.readline, ''):
+
+            scale = float(re.findall('\S+', fc.readline())[0])
+            
+            # box parameters
+            box = np.empty((3, 3), dtype=float)
+            for i in range(3):
+                box[i,:] = [float(x)*scale for x in re.findall('\S+', fc.readline())]
+
+            # atom names
+            atom_types = [name for name in re.findall('\S+', fc.readline())]
+
+            # number of atoms
+            atom_nums = [int(num) for num in re.findall('\S+', fc.readline())]
+            nat = sum(atom_nums)
+
+            line = fc.readline()
+            
+            # atomic configuration
+            xyz = np.empty((nat, 3), dtype=float)
+            for i in range(nat):
+                xyz[i] = [float(x) for x in re.findall('\S+', fc.readline())]
+            
+            boxs.append(box)
+            xyzs.append(xyz)
+
+    traj = {'box':boxs, 'xyz':xyzs, 'atom_type':atom_types, 'atom_num':atom_nums}
+
+    return traj
+
+
+def read_outcar(filename):
+    """
+    Reads VASP OUTCAR
+
+    Parameters
+    ----------
+    filename: str
+              full path and name of the OUTCAR
+
+    Returns
+    -------
+    traj: dict
+          trajectory information with keys given below
+    box: list of 3x3 ndarrays
+          Box dimensions
+    xyz: list of natom x 3 ndarrays
+          Atomic configurations
+    energy: list of floats
+            list of configurational energies
+    free_energy: list of floats
+            list of free energies
+    total_energy: list of floats
+            list of total energies (including kinetic and thermostat)
+    atom_num: list of ints
+                atom numbers for each type
+    """
+
+    with open(filename, 'r') as f:
+    
+        # initialize trajectory dataset
+        boxs = [] ; xyzs = [] ; enes = [] ; forces = [] ; temps = []
+        vects = [] ; enes_free = [] ; enes_tot = []
+    
+        for line in iter(f.readline, ''):
+        
+            # number of ions/atoms
+            if re.search('number of ions', line):
+                nat = int(re.findall('\S+', line)[-1])
+        
+            # number of atoms of each type
+            elif re.search('ions per type', line):
+                atom_num = [int(n) for n in re.findall('\S+', line)[4:4+nat]]
+        
+            # box shape and dimensions
+            elif re.search('VOLUME and BASIS-vectors are now', line):
+                for _ in range(4):
+                    line = f.readline()
+                
+                # read box information
+                box = np.empty((3,3), dtype=np.float64)
+                for i in range(3):
+                    box[i,:] = [float(x) for x in re.findall('\S+', f.readline())][0:3]
+                boxs.append(box)
+            
+                for _ in range(2):
+                    line = f.readline()
+                
+                # read a, b, c vector lengths
+                vect = np.array([float(x) for x in re.findall('\S+', f.readline())][0:3])
+                vects.append(vect)
+
+            # atom cartesian coordinates [A] and forces [eV/A]
+            elif re.search('POSITION.*TOTAL-FORCE', line):                
+                line = f.readline()
+            
+                # read coordinate and force data for all nat atoms
+                data = np.array([[float(x) for x in f.readline().split()] for _ in range(nat)])
+            
+                # create new coordinate array
+                xyz = np.empty((nat, 3), dtype=np.float64)
+                xyz[:,:] = data[:,0:3]
+            
+                assert len(xyzs) + 1 == len(boxs), f'lengths of xyzs {len(xyzs)+1} and boxs {len(boxs)} do not match'
+            
+                # convert cartesian coordinates into lattice units
+                box_inv = np.linalg.inv(boxs[-1])
+                xyz = np.matmul(box_inv, xyz.T).T
+
+                # create a new force array
+                force = np.empty((nat, 3), dtype=np.float64)
+                force[:,:] = data[:,3:6]
+            
+                xyzs.append(xyz)
+                forces.append(force)
+            
+            # E0 energy without entropy for sigma->0
+            elif re.search('FREE ENERG.*\s+OF\s+THE\s+ION.ELECTRON\s+SYSTEM\s+\(eV\)', line):
+                
+                # check if the format agrees with the current assumptions
+                if not re.search('------------', f.readline()):
+                    raise ValueError('Could not find a separator line (----).')
+                
+                # read free energy (without kinetics)
+                line = f.readline()
+                if re.search('free\s+energy\s+TOTEN\s+=.+eV', line):
+                    ene_free = float(re.findall('\S+', line)[-2])
+                    enes_free.append(ene_free)
+                else:
+                    raise ValueError('Could not find a line with free energy (TOTEN).')
+                    
+                line = f.readline()
+                
+                # read energy without entropy for sigma->0
+                line = f.readline()
+                if re.search('energy\s+without\s+entropy.+sigma', line):
+                    ene = float(re.findall('\S+', line)[-1])
+                    enes.append(ene)
+                else:
+                    raise ValueError('Could not find a line with free energy (TOTEN).')
+                
+           
+            # Total energy including thermostat 
+            elif re.search('ETOTAL', line):
+                ene_tot = float(line.split()[-2])
+                enes_tot.append(ene_tot)
+            
+            # Instantaneous temperature 
+            elif re.search('EKIN_LAT', line):
+                mo = re.search('\(temperature\s+(\d+\.?\d*)\s+K\)', line)
+                temp = float(mo.group(1))
+                temps.append(temp)
+
+    #print(len(boxs), len(xyzs), len(enes), len(forces), len(temps))
+    #print(len(enes_free), len(enes_tot))
+    # check if the lengths of trajectory lists match
+    assert len(enes) == len(xyzs), f'{dataset} energy and XYZ lenghts do not match: {len(enes)}, {len(xyzs)}'
+    
+    # combine trajectory data in a dictionary
+    traj = {'box':boxs, 'xyz':xyzs, 'energy':enes, 'forces':forces, 'temp':temps}
+    traj.update({'free_energy':enes_free, 'total_energy':enes_tot, 'atom_num':atom_num})
+    
+    return traj
+
+def read_oszicar(filename):
+    # read configurational energies
+
+    with open(filename, 'r') as f:
+        enes = [] ; temps = [] ; enes_tot = [] ; enes_free = []
+        for line in iter(f.readline, ''):
+            if re.search('T=', line):
+                sarr = re.findall('\S+', line)
+                temps.append(float(sarr[2]))
+                enes_tot.append(float(sarr[4]))
+                enes_free.append(float(sarr[6]))
+                enes.append(float(sarr[8]))
+
+    # combine trajectory data in a dictionary
+    traj = {'energy':enes,
+            'temp':temps,
+            'free_energy':enes_free,
+            'total_energy':enes_tot}
+
+    return traj
+
+def read_incar(filename):
+    traj = {}
+    return traj
+
+def read_vasp(vasp_dir, verbose=True):
+    """
+    Reads configuration and energy files from a VASP MD simulation in a given directory
+    and returns trajectory data in a dictionary.
+    
+    Parameters
+    ----------
+    vasp_dir : string
+              directory with VASP MD simulation data, has to contain XDATCAR and md.out files
+    verbose: bool, default: True
+              If True, print runtime information.
+             
+    Returns
+    -------
+    traj : dictionary
+           trajectory information (configuration, box, energy, forces)
+    """
+
+    # dict of vasp_files and functions to read them
+    vasp_files = {
+            'OUTCAR':read_outcar,
+            'POSCAR':read_poscar,
+            'CONTCAR':read_poscar,
+            'XDATCAR':read_xdatcar,
+            'OSZICAR':read_oszicar,
+            'INCAR':read_incar
+            }
+
+    # data obtained from different files
+    alldata = {}
+
+    for file_name, read_func in vasp_files.items():
+
+
+        # find all file names of type 'file_name'
+        file_names = glob.glob(os.path.join(vasp_dir, file_name+'*'))
+
+        if file_names:
+            # make sure maximum one file of each type exists in the directory
+            assert len(file_names) <= 1, f'Too many files of type {file_name}.'
+
+            if os.path.isfile(file_names[0]):
+                if verbose:
+                    print(f"Reading {file_names[0]}")
+
+                alldata[file_name] = read_func(file_names[0])
+            else:
+                print(f'{file_name} not present')
+
+
+    # Perform consistency checks between data from different VASP files
+
+    # Check system composition and trajectory lengths
+    if 'OUTCAR' in alldata and 'POSCAR' in alldata:
+        assert alldata['OUTCAR']['atom_num'] == alldata['POSCAR']['atom_num'], 'Atom numbers in OUTCAR AND POSCAR do not match'
+        cfg_shape_out = alldata['OUTCAR']['box'][0].shape
+        cfg_shape_pos = alldata['POSCAR']['box0'].shape
+        assert cfg_shape_out == cfg_shape_pos, 'Configuration shape in OUTCAR AND POSCAR do not match'
+
+    if 'OUTCAR' in alldata and 'CONTCAR' in alldata:
+        assert alldata['OUTCAR']['atom_num'] == alldata['CONTCAR']['atom_num'], 'Atom numbers in OUTCAR AND POSCAR do not match'
+        cfg_shape_out = alldata['OUTCAR']['box'][0].shape
+        cfg_shape_pos = alldata['CONTCAR']['box0'].shape
+        assert cfg_shape_out == cfg_shape_pos, 'Configuration shape in OUTCAR AND CONTCAR do not match'
+
+    if 'OUTCAR' in alldata and 'XDATCAR' in alldata:
+        assert alldata['OUTCAR']['atom_num'] == alldata['XDATCAR']['atom_num'], 'Atom numbers in OUTCAR AND XDATCAR do not match'
+        traj_len_out = len(alldata['OUTCAR']['xyz'])
+        traj_len_xdat = len(alldata['XDATCAR']['xyz'])
+        assert traj_len_out == traj_len_xdat, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND XDATCAR ({traj_len_xdat}) do not match'
+
+    if 'POSCAR' in alldata and 'CONTCAR' in alldata:
+        assert alldata['POSCAR']['atom_num'] == alldata['CONTCAR']['atom_num'], 'Atom numbers in CONTCAR AND POSCAR do not match'
+        assert alldata['POSCAR']['atom_type'] == alldata['CONTCAR']['atom_type'], 'Atom types in CONTCAR AND POSCAR do not match'
+
+    if 'POSCAR' in alldata and 'XDATCAR' in alldata:
+        assert alldata['POSCAR']['atom_num'] == alldata['XDATCAR']['atom_num'], 'Atom numbers in OUTCAR AND XDATCAR do not match'
+        assert alldata['POSCAR']['atom_type'] == alldata['XDATCAR']['atom_type'], 'Atom numbers in OUTCAR AND XDATCAR do not match'
+
+    if 'CONTCAR' in alldata and 'XDATCAR' in alldata:
+        assert alldata['CONTCAR']['atom_num'] == alldata['XDATCAR']['atom_num'], 'Atom numbers in CONTCAR AND XDATCAR do not match'
+        assert alldata['CONTCAR']['atom_type'] == alldata['XDATCAR']['atom_type'], 'Atom numbers in CONTCAR AND XDATCAR do not match'
+
+    if 'OUTCAR' in alldata and 'OSZICAR' in alldata:
+        traj_len_out = len(alldata['OUTCAR']['energy'])
+        traj_len_oszi = len(alldata['OSZICAR']['energy'])
+        assert traj_len_out == traj_len_oszi, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND OSZICAR ({traj_len_oszi}) do not match'
+
+    # Check numerical values of boxes, coordinates, energies, and temperatures
+
+    # If passed, combine data into the most complete trajectory dict
+
+    traj = {}
+    for key in alldata:
+        traj.update(alldata[key])
+
+    return traj
