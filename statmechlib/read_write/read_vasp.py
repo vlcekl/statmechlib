@@ -191,7 +191,7 @@ def read_outcar(filename):
                 assert len(xyzs) + 1 == len(boxs), f'lengths of xyzs {len(xyzs)+1} and boxs {len(boxs)} do not match'
             
                 # convert cartesian coordinates into lattice units
-                box_inv = np.linalg.inv(boxs[-1])
+                box_inv = np.linalg.inv(boxs[-1].T)
                 xyz = np.matmul(box_inv, xyz.T).T
 
                 # create a new force array
