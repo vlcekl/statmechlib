@@ -1,8 +1,9 @@
 import numpy as np
 from itertools import combinations_with_replacement
 from collections import defaultdict
+from .pair_dist import pair_dist, pair_dist_cutoff
 
-def get_stats_Mie(rr, rx, ms, atom_type=None, rcut=None):
+def get_stats_Mie(xyz, box, atom_type=None, ms=[12,6], rcut=None):
     """
     Takes atom pair distances and calculates sufficeint statistics needed
     for the parameterization 1/r^m type potentials (Lennard-Jones, Mie).
@@ -30,33 +31,47 @@ def get_stats_Mie(rr, rx, ms, atom_type=None, rcut=None):
 
     # set rcut to max if None
     if rcut == None:
-        rcut = rr.max()
+        rcut = 0.5*min(box[0,0], box[1,1], box[2,2])
 
-    # Create 2D matrix of inverse distances (eliminate rr=0 and distances beyond cutoff)
-    rinv = np.where(rr > 0.01 and rr <= rcut, 1/rr, 0.0)
-
-    # Create a list of 2D matrices with 1/r^m values
-    rpow = [rinv**m for m in ms]
+    # get pair distances (absolute and Cartesian components)
+    rr, rx = pair_dist_cutoff(xyz, box, rcut)
 
     # if needed, set the atom number types
-    if atom_type == None:
-        atom_type = np.ones((rr.shape[0]), dtype=int)
+    if type(atom_type) == None:
+        atom_type1 = np.ones((rr.shape[0]), dtype=int)
+        atom_type2 = np.ones((rr.shape[1]), dtype=int)
+    else:
+        atom_type1 = atom_type
+        # how many times the original box was replicated?
+        nreplicas = rr.shape[1]//rr.shape[0] 
+        atom_type2 = np.concatenate([atom_type]*nreplicas)
 
     # particle type mesh grids
-    mti, mtj = np.meshgrid(atom_type, atom_type)
+    mti, mtj = np.meshgrid(atom_type1, atom_type2, indexing='ij')
+    ii, jj = np.meshgrid(range(rr.shape[0]), range(rr.shape[1]), indexing='ij')
+
+    assert mti.shape == rr.shape, f"stats_mie: Shapes of mti {mti.shape} and rr {rr.shape} are incompatible"
+    assert ii.shape == rr.shape, f"stats_mie: Shapes of ii {ii.shape} and rr {rr.shape} are incompatible"
+
+    # Create 2D matrix of inverse distances (eliminate rr=0 and distances beyond cutoff)
+    with np.errstate(divide='ignore'):
+        rinv = np.where(np.logical_and(rr > 0.01, rr <= rcut), 1.0/rr, 0.0)
+
+    # Create lists of 2D matrices with 1/r^m and 1/r^(m+2) values for energy
+    # ane force calculations, respectively
+    rpow_u = [rinv**m for m in ms]
+    rpow_f = [rinv**(m+2) for m in ms]
+
+    print('rcut:', rcut, mti.shape, mtj.shape, rpow_u[0].shape)
 
     # cycle over all combinations of pairs of particle types
     u_stats = defaultdict(list)
-    for ti, tj in combinations_with_replacement(set(atom_type)):
-        for rpmat in rpow:
-            u_stats[(ti, tj)].append(np.sum(np.where(mti==ti and mtj==tj, rpmat, 0.0)))
-            #f_stats[(ti, tj)].append(np.sum(np.where(mti==ti and mtj==tj, rpmat, 0.0)))
-
-    # 
     f_stats = defaultdict(list)
-    for ti, tj in combinations_with_replacement(set(atom_type)):
-        for rpmat in rpow:
-            pass
-            #f_stats[(ti, tj)].append(np.sum(np.where(mti==ti and mtj==tj, rpmat, 0.0)))
+    for ti, tj in combinations_with_replacement(set(atom_type1), 2):
+        for m, rmat_u, rmat_f in zip(ms, rpow_u, rpow_f):
+            rmat_u = np.where(jj > ii, rmat_u, 0.0)
+            u_stats[(ti, tj)].append(np.sum(np.where(np.logical_and(mti==ti, mtj==tj), rmat_u, 0.0)))
+            f_stats[(ti, tj)].append(np.sum(np.where(np.logical_and(mti==ti, mtj==tj), rmat_f, 0.0), axis=1))
 
-    return a1, ar, a2, b1, br, b2
+    return dict(u_stats), dict(f_stats)
+

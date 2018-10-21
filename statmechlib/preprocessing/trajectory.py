@@ -40,6 +40,9 @@ class Trajectory:
     def __getitem__(self, key):
         return self._trajectory[key]
 
+    def __setitem__(self, key, value):
+        self._trajectory[key] = value
+
     def merge(self, traj_object):
         pass
 
@@ -53,13 +56,27 @@ class Trajectory:
 
         all_keys = set(list(self._trajectory) + list(new_traj._trajectory))
 
-        for key in all_keys:
+        # define special treatment of different trajectory items
+        # Only connect trajectories with the same ensembles
 
-            # assume appending a trajectory with the same composition
-            #this is valid only for constant number of particles and types (will need to
-            # be more general in future
-            if ('atom' not in key) and ('ensemble' not in key) and ('0' not in key):
-                self._trajectory[key] += new_traj._trajectory[key]
+        assert self['ensemble'] == new_traj['ensemble'], "Trying to append trajectories of incompatible ensembles"
+
+        # Check that nvt and npt ensembles keep the same particle names, types, and numbers
+        if self['ensemble'] == 'nvt' or self['ensemble'] == 'npt':
+            assert self['atom_name'] == new_traj['atom_name'], "Append: atom_name does not match"
+            assert self['atom_num'] == new_traj['atom_num'], "Append: atom_num does not match"
+            assert np.array_equal(self['atom_type'][0], new_traj['atom_type'][0]), "Append: atom_type arrays do not match"
+
+        # Check that nvt and uvt ensembles have the same box parameters
+        if self['ensemble'] == 'nvt' or self['ensemble'] == 'uvt':
+            assert self['box'] == new_traj['box'], f"Append: box parameters do not match"
+
+        # define which items will be appended
+        append_keys = ['xyz', 'box', 'atom_type', 'temp', 'forces']
+        append_keys.extend(['energy', 'free_energy', 'total_energy'])
+
+        for key in append_keys:
+            self[key] += new_traj[key]
 
 
     def replicate(self, vec_a=1, vec_b=1, vec_c=1, inplace=False):
@@ -97,14 +114,15 @@ class Trajectory:
         multiply = vec_a*vec_b*vec_c
 
         # multiply atom numbers and types
-        trj_handle._trajectory['atom_type'] = self['atom_type']*multiply
-        trj_handle._trajectory['atom_num'] = self['atom_num']*multiply
+        trj_handle['atom_name'] = self['atom_name']*multiply
+        trj_handle['atom_num'] = self['atom_num']*multiply
 
         # cycle over trajectory configurations
         for i in range(len(self['box'])):
 
             # create a new array accommodating the replicated configuration
             new_xyz = np.empty((nat*multiply, 3), dtype=float)
+            new_type = np.empty((nat*multiply), dtype=int)
 
             # replicate coordinates, add new atoms at the end of the xyz array
             j = 0
@@ -114,22 +132,25 @@ class Trajectory:
                         new_xyz[j*nat:(j+1)*nat,0] = self['xyz'][i][0:nat,0] + float(ia)
                         new_xyz[j*nat:(j+1)*nat,1] = self['xyz'][i][0:nat,1] + float(ib)
                         new_xyz[j*nat:(j+1)*nat,2] = self['xyz'][i][0:nat,2] + float(ic)
+                        new_type[j*nat:(j+1)*nat] = self['atom_type'][i][0:nat]
                         j += 1
                                 
-            trj_handle._trajectory['xyz'][i] = new_xyz
+            trj_handle['xyz'][i] = new_xyz
+            trj_handle['atom_type'][i] = new_type
 
             # scale original coordinates
-            trj_handle._trajectory['xyz'][i][:,0] /= float(vec_a)
-            trj_handle._trajectory['xyz'][i][:,1] /= float(vec_b)
-            trj_handle._trajectory['xyz'][i][:,2] /= float(vec_c)
+            trj_handle['xyz'][i][:,0] /= float(vec_a)
+            trj_handle['xyz'][i][:,1] /= float(vec_b)
+            trj_handle['xyz'][i][:,2] /= float(vec_c)
 
-            trj_handle._trajectory['box'][i][0,:] = self['box'][i][0,:]*float(vec_a)
-            trj_handle._trajectory['box'][i][1,:] = self['box'][i][1,:]*float(vec_b)
-            trj_handle._trajectory['box'][i][2,:] = self['box'][i][2,:]*float(vec_c)
+            trj_handle['box'][i][0,:] = self['box'][i][0,:]*float(vec_a)
+            trj_handle['box'][i][1,:] = self['box'][i][1,:]*float(vec_b)
+            trj_handle['box'][i][2,:] = self['box'][i][2,:]*float(vec_c)
+
 
             # multiply all energy data
             for key in [k for k in self._trajectory.keys() if 'energy' in k]:
-                trj_handle._trajectory[key][i] = self[key][i]*float(multiply)
+                trj_handle[key][i] = self[key][i]*float(multiply)
 
         if not inplace:
             return trj_handle
@@ -144,10 +165,10 @@ class Trajectory:
         with open(file_name, 'w') as f:
             # cycle through configurations in trajectory, assign atom names, and write to file
 
-            for box, xyz in zip(self._trajectory['box'], self._trajectory['xyz']):
+            for box, xyz in zip(self['box'], self['xyz']):
 
                 # write total number of atoms
-                nat = sum(self._trajectory['atom_num'])
+                nat = sum(self['atom_num'])
                 f.write(f'{nat}\n')
 
                 # write box parameters
@@ -157,9 +178,9 @@ class Trajectory:
 
                 # write atom coordinates
                 i = 0
-                for atom_type, atom_num in zip(self._trajectory['atom_type'], self._trajectory['atom_num']):
+                for atom_name, atom_num in zip(self['atom_name'], self['atom_num']):
                     for _ in range(atom_num):
                         x, y, z = (box.T).dot(xyz[i])
-                        f.write(f'{atom_type} {x} {y} {z}\n')
+                        f.write(f'{atom_name} {x} {y} {z}\n')
                         i += 1
 
