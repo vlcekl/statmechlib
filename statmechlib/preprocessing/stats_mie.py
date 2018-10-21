@@ -46,32 +46,61 @@ def get_stats_Mie(xyz, box, atom_type=None, ms=[12,6], rcut=None):
         nreplicas = rr.shape[1]//rr.shape[0] 
         atom_type2 = np.concatenate([atom_type]*nreplicas)
 
-    # particle type mesh grids
-    mti, mtj = np.meshgrid(atom_type1, atom_type2, indexing='ij')
-    ii, jj = np.meshgrid(range(rr.shape[0]), range(rr.shape[1]), indexing='ij')
-
-    assert mti.shape == rr.shape, f"stats_mie: Shapes of mti {mti.shape} and rr {rr.shape} are incompatible"
-    assert ii.shape == rr.shape, f"stats_mie: Shapes of ii {ii.shape} and rr {rr.shape} are incompatible"
 
     # Create 2D matrix of inverse distances (eliminate rr=0 and distances beyond cutoff)
     with np.errstate(divide='ignore'):
         rinv = np.where(np.logical_and(rr > 0.01, rr <= rcut), 1.0/rr, 0.0)
 
-    # Create lists of 2D matrices with 1/r^m and 1/r^(m+2) values for energy
-    # ane force calculations, respectively
-    rpow_u = [rinv**m for m in ms]
-    rpow_f = [rinv**(m+2) for m in ms]
+    # particle type mesh grids
+    mti, mtj = np.meshgrid(atom_type1, atom_type2, indexing='ij')
+    assert mti.shape == rr.shape, f"stats_mie: Shapes of mti {mti.shape} and rr {rr.shape} are incompatible"
 
+    # ENERGY cacluations
+
+
+    # Create lists of 2D matrices with 1/r^m values for energy
+    rpow_u = [rinv**m for m in ms]
     print('rcut:', rcut, mti.shape, mtj.shape, rpow_u[0].shape)
 
-    # cycle over all combinations of pairs of particle types
+    # meshgrid to eliminate duplicate pair interactins
+    ii, jj = np.meshgrid(range(rr.shape[0]), range(rr.shape[1]), indexing='ij')
+    assert ii.shape == rr.shape, f"stats_mie: Shapes of ii {ii.shape} and rr {rr.shape} are incompatible"
+
+    # cycle over all combinations of pairs of particle types for energy contributions
     u_stats = defaultdict(list)
+    for ti, tj in combinations_with_replacement(set(atom_type1), 2):
+        for m, rmat_u in zip(ms, rpow_u):
+            # erase duplicate interactions (i,j)==(j,i)
+            rmat_u = np.where(jj > ii, rmat_u, 0.0)
+
+            # halve in-box out-box interaction contributions
+            rmat_u = np.where(jj < rr.shape[0], rmat_u, 0.5*rmat_u)
+
+            # sum contributions from the given atom types (ti, tj)
+            u_stats[(ti, tj)].append(np.sum(np.where(np.logical_and(mti==ti, mtj==tj), rmat_u, 0.0)))
+
+
+    # FORCE cacluations
+
+    # particle type mesh grids for forces - stack 
+    fti = np.stack((mti, mti, mti), axis=-1)
+    ftj = np.stack((mtj, mtj, mtj), axis=-1)
+    assert fti.shape == rx.shape, f"The shapes of fti {fti.shape} and rx {rx.shape} are different"
+
+    # Create lists of 2D matrices with 1/r^(m+2) values for forces
+    rpow_x = [rinv**(m+2) for m in ms]
+
+    # Multiply the force values by the components of atom-atom distance vectors
+    rpow_f = [np.empty_like(rx) for m in ms]
+    for m in range(len(ms)):
+        for i in range(3):
+            rpow_f[m][:,:,i] = rpow_x[m]*rx[:,:,i]
+
+    # cycle over all combinations of pairs of particle types for force contributions
     f_stats = defaultdict(list)
     for ti, tj in combinations_with_replacement(set(atom_type1), 2):
-        for m, rmat_u, rmat_f in zip(ms, rpow_u, rpow_f):
-            rmat_u = np.where(jj > ii, rmat_u, 0.0)
-            u_stats[(ti, tj)].append(np.sum(np.where(np.logical_and(mti==ti, mtj==tj), rmat_u, 0.0)))
-            f_stats[(ti, tj)].append(np.sum(np.where(np.logical_and(mti==ti, mtj==tj), rmat_f, 0.0), axis=1))
+        for m, rmat_f in zip(ms, rpow_f):
+            f_stats[(ti, tj)].append(np.sum(np.where(np.logical_and(fti==ti, ftj==tj), rmat_f, 0.0), axis=1))
 
     return dict(u_stats), dict(f_stats)
 
