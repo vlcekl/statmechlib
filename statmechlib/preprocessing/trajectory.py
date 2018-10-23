@@ -172,9 +172,10 @@ class Trajectory:
                 f.write(f'{nat}\n')
 
                 # write box parameters
-                lx, ly, lz = box[0,0], box[1,1], box[2,2]
-                xy, xz, yz = box[0,1], box[0,2], box[1,2]
-                f.write(f'{lx} {ly} {lz} {xy} {xz} {yz}\n')
+                ax, ay, az = box[0,0], box[0,1], box[0,2]
+                bx, by, bz = box[1,0], box[1,1], box[1,2]
+                cx, cy, cz = box[2,0], box[2,1], box[2,2]
+                f.write(f'{ax} {ay} {az} {bx} {by} {bz} {cx} {cy} {cz}\n')
 
                 # write atom coordinates
                 i = 0
