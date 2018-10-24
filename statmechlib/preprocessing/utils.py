@@ -1,4 +1,5 @@
 import numpy as np
+#import pandas as pd
 
 def normalize_histogram(hist, columns='all'):
     """
@@ -28,4 +29,25 @@ def normalize_histogram(hist, columns='all'):
 
     return norm_hist
 
+def map_histograms(hist, mapfunc):
+    """
+    Performs histogram transformation from one domain to another.
+    Mostly used for coarse graining based on symmetry
+
+    Parameters
+    ----------
+    hist: ndarray of floats
+          original histogram
+    mapfunc: function or dict
+          maps histogram bins (first column) from old to new
+
+    Returns
+    -------
+    new_hist: ndarray of floats
+    """
+
+    new_hist = np.empty_like(hist)
+
+
+    return new_hist
 
