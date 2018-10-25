@@ -153,3 +153,39 @@ def read_lattice_model(latt_dir, verbose=True):
 
 
     return traj
+
+def write_modeldef(filename, pars):
+    """Read configurational energies"""
+
+    with open(filename, 'r') as f, open(filename+'_temp', 'w') as fo:
+
+        line = f.readline()
+        fo.write(line)
+
+        i = 0
+
+        line = f.readline()
+        fo.write(line)
+        nn_pars = int(re.findall('\S+', line)[1])
+
+        for _ in range(nn_pars):
+            sarr = re.findall('\S+', f.readline())
+            fo.write(f'{sarr[0]} {sarr[1]} {pars[i]}\n')
+            i += 1
+
+        line = f.readline()
+        fo.write(line)
+        nnn_pars = int(re.findall('\S+', line)[1])
+
+        for _ in range(nnn_pars):
+            sarr = re.findall('\S+', f.readline())
+            fo.write(f'{sarr[0]} {sarr[1]} {pars[i]}\n')
+            i += 1
+
+        for line in iter(f.readline, ''):
+            fo.write(line)
+
+    assert i == len(pars), f"The number of old ({i}) and new ({len(pars)}) do not match."
+
+    os.rename(filename, filename+'_old')
+    os.rename(filename+'_temp', filename)

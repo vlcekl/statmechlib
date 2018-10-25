@@ -1,1 +1,1 @@
-from .lattgas import sd_hist
+from .lattgas import sd2
