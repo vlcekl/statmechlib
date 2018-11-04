@@ -117,27 +117,32 @@ def read_xdatcar(filename):
         xyzs = [] ; boxs = [] ; atom_types = []
 
         for line in iter(fc.readline, ''):
+            if re.search('Direct configuration', line):
+                box = np.copy(boxs[-1])
+                atypes = np.copy(atom_types[-1])
+                atom_types.append(atypes)
 
-            scale = float(re.findall('\S+', fc.readline())[0])
+            else:
+                scale = float(re.findall('\S+', fc.readline())[0])
             
-            # box parameters
-            box = np.empty((3, 3), dtype=float)
-            for i in range(3):
-                box[i,:] = [float(x)*scale for x in re.findall('\S+', fc.readline())]
+                # box parameters
+                box = np.empty((3, 3), dtype=float)
+                for i in range(3):
+                    box[i,:] = [float(x)*scale for x in re.findall('\S+', fc.readline())]
 
-            # atom names
-            atom_names = [name for name in re.findall('\S+', fc.readline())]
+                # atom names
+                atom_names = [name for name in re.findall('\S+', fc.readline())]
 
-            # number of atoms
-            atom_nums = [int(num) for num in re.findall('\S+', fc.readline())]
-            nat = sum(atom_nums)
+                # number of atoms
+                atom_nums = [int(num) for num in re.findall('\S+', fc.readline())]
+                nat = sum(atom_nums)
 
-            # create a list of atom types from atom_name and atom_num
-            atom_types.append(make_atom_types(atom_nums))
+                # create a list of atom types from atom_name and atom_num
+                atom_types.append(make_atom_types(atom_nums))
 
-            assert len(atom_types[-1]) == nat, f'Length of atom_types {len(atom_types[-1])} does not match number of atoms {nat}'
+                assert len(atom_types[-1]) == nat, f'Length of atom_types {len(atom_types[-1])} does not match number of atoms {nat}'
 
-            line = fc.readline()
+                line = fc.readline()
             
             # atomic configuration
             xyz = np.empty((nat, 3), dtype=float)
@@ -185,6 +190,7 @@ def read_outcar(filename):
         # initialize trajectory dataset
         boxs = [] ; xyzs = [] ; enes = [] ; forces = [] ; temps = []
         vects = [] ; enes_free = [] ; enes_tot = [] ; atom_types = []
+        ensemble = 'relax'
     
         for line in iter(f.readline, ''):
         
@@ -195,6 +201,12 @@ def read_outcar(filename):
             # number of atoms of each type
             elif re.search('ions per type', line):
                 atom_nums = [int(n) for n in re.findall('\S+', line)[4:4+nat]]
+
+            elif re.search('molecular dynamics for ions', line):
+                ensemble = 'md'
+
+            elif re.search('relaxation of ions', line):
+                ensemble = 'relax'
         
             # box shape and dimensions
             elif re.search('VOLUME and BASIS-vectors are now', line):
@@ -287,6 +299,7 @@ def read_outcar(filename):
     # combine trajectory data in a dictionary
     traj = {'box':boxs, 'xyz':xyzs, 'atom_type':atom_types, 'energy':enes, 'forces':forces, 'temp':temps}
     traj.update({'free_energy':enes_free, 'total_energy':enes_tot, 'atom_num':atom_nums})
+    traj.update({'ensemble':ensemble})
     
     return traj
 
@@ -296,18 +309,28 @@ def read_oszicar(filename):
     with open(filename, 'r') as f:
         enes = [] ; temps = [] ; enes_tot = [] ; enes_free = []
         for line in iter(f.readline, ''):
-            if re.search('T=', line):
+            if re.search('T=', line) and re.search('F=', line):
+                ensemble = 'md'
                 sarr = re.findall('\S+', line)
                 temps.append(float(sarr[2]))
                 enes_tot.append(float(sarr[4]))
                 enes_free.append(float(sarr[6]))
                 enes.append(float(sarr[8]))
 
+            elif (not re.search('T=', line)) and re.search('F=', line):
+                ensemble = 'relax'
+                sarr = re.findall('\S+', line)
+                temps.append(0.0)
+                enes_free.append(float(sarr[2]))
+                enes_tot.append(float(sarr[4])) # set total_energy at 0K to same as energy
+                enes.append(float(sarr[4]))
+
     # combine trajectory data in a dictionary
     traj = {'energy':enes,
             'temp':temps,
             'free_energy':enes_free,
-            'total_energy':enes_tot}
+            'total_energy':enes_tot,
+            'ensemble':ensemble}
 
     return traj
 
