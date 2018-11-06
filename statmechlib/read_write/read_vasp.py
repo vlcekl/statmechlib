@@ -69,8 +69,8 @@ def read_poscar(filename):
         atom_names = [name for name in re.findall('\S+', fc.readline())]
 
         # number of atoms
-        atom_nums = [int(num) for num in re.findall('\S+', fc.readline())]
-        nat = sum(atom_nums)
+        atnums = [int(num) for num in re.findall('\S+', fc.readline())]
+        nat = sum(atnums)
 
         line = fc.readline()
             
@@ -80,10 +80,10 @@ def read_poscar(filename):
             xyz[i] = [float(x) for x in re.findall('\S+', fc.readline())]
 
         # create a list of atom types from atom_name and atom_num
-        atom_types = make_atom_types(atom_nums)
+        atom_types = make_atom_types(atnums)
 
             
-    traj = {'box0':box, 'xyz0':xyz, 'atom_type0':atom_types, 'atom_name':atom_names, 'atom_num':atom_nums}
+    traj = {'box0':box, 'xyz0':xyz, 'atom_type0':atom_types, 'atom_name':atom_names, 'atom_num0':atnums}
 
     return traj
 
@@ -114,13 +114,13 @@ def read_xdatcar(filename):
 
     with open(filename, 'r') as fc:
 
-        xyzs = [] ; boxs = [] ; atom_types = []
+        xyzs = [] ; boxs = [] ; atom_types = [] ; atom_nums = []
 
         for line in iter(fc.readline, ''):
             if re.search('Direct configuration', line):
                 box = np.copy(boxs[-1])
-                atypes = np.copy(atom_types[-1])
-                atom_types.append(atypes)
+                atom_types.append(np.copy(atom_types[-1]))
+                atom_nums.append(np.copy(atom_nums[-1]))
 
             else:
                 scale = float(re.findall('\S+', fc.readline())[0])
@@ -134,16 +134,18 @@ def read_xdatcar(filename):
                 atom_names = [name for name in re.findall('\S+', fc.readline())]
 
                 # number of atoms
-                atom_nums = [int(num) for num in re.findall('\S+', fc.readline())]
-                nat = sum(atom_nums)
+                atom_nums.append([int(num) for num in re.findall('\S+', fc.readline())])
+                nat = sum(atom_nums[-1])
 
                 # create a list of atom types from atom_name and atom_num
-                atom_types.append(make_atom_types(atom_nums))
+                atom_types.append(make_atom_types(atom_nums[-1]))
 
                 assert len(atom_types[-1]) == nat, f'Length of atom_types {len(atom_types[-1])} does not match number of atoms {nat}'
 
                 line = fc.readline()
+
             
+
             # atomic configuration
             xyz = np.empty((nat, 3), dtype=float)
             for i in range(nat):
@@ -189,7 +191,7 @@ def read_outcar(filename):
     
         # initialize trajectory dataset
         boxs = [] ; xyzs = [] ; enes = [] ; forces = [] ; temps = []
-        vects = [] ; enes_free = [] ; enes_tot = [] ; atom_types = []
+        vects = [] ; enes_free = [] ; enes_tot = [] ; atom_types = [] ; atom_nums = []
         ensemble = 'relax'
     
         for line in iter(f.readline, ''):
@@ -200,7 +202,7 @@ def read_outcar(filename):
         
             # number of atoms of each type
             elif re.search('ions per type', line):
-                atom_nums = [int(n) for n in re.findall('\S+', line)[4:4+nat]]
+                atnums = [int(n) for n in re.findall('\S+', line)[4:4+nat]]
 
             elif re.search('molecular dynamics for ions', line):
                 ensemble = 'md'
@@ -251,8 +253,9 @@ def read_outcar(filename):
                 forces.append(force)
 
                 # create a list of atom types from atom_nums
-                atom_types.append(make_atom_types(atom_nums))
-                assert len(atom_types[-1]) == sum(atom_nums), f'Length of atom_types {len(atom_types[-1])} does not match number of atoms {sum(atom_nums)}'
+                atom_nums.append(atnums)
+                atom_types.append(make_atom_types(atom_nums[-1]))
+                assert len(atom_types[-1]) == sum(atom_nums[-1]), f'Length of atom_types {len(atom_types[-1])} does not match number of atoms {sum(atom_nums)}'
             
             # E0 energy without entropy for sigma->0
             elif re.search('FREE ENERG.*\s+OF\s+THE\s+ION.ELECTRON\s+SYSTEM\s+\(eV\)', line):
@@ -392,33 +395,33 @@ def read_vasp(vasp_dir, verbose=True):
 
     # Check system composition and trajectory lengths
     if 'OUTCAR' in alldata and 'POSCAR' in alldata:
-        assert alldata['OUTCAR']['atom_num'] == alldata['POSCAR']['atom_num'], 'Atom numbers in OUTCAR AND POSCAR do not match'
+        assert alldata['OUTCAR']['atom_num'][0] == alldata['POSCAR']['atom_num0'], 'Atom numbers in OUTCAR AND POSCAR do not match'
         cfg_shape_out = alldata['OUTCAR']['box'][0].shape
         cfg_shape_pos = alldata['POSCAR']['box0'].shape
         assert cfg_shape_out == cfg_shape_pos, 'Configuration shape in OUTCAR AND POSCAR do not match'
 
     if 'OUTCAR' in alldata and 'CONTCAR' in alldata:
-        assert alldata['OUTCAR']['atom_num'] == alldata['CONTCAR']['atom_num'], 'Atom numbers in OUTCAR AND POSCAR do not match'
+        assert alldata['OUTCAR']['atom_num'][0] == alldata['CONTCAR']['atom_num0'], 'Atom numbers in OUTCAR AND POSCAR do not match'
         cfg_shape_out = alldata['OUTCAR']['box'][0].shape
         cfg_shape_pos = alldata['CONTCAR']['box0'].shape
         assert cfg_shape_out == cfg_shape_pos, 'Configuration shape in OUTCAR AND CONTCAR do not match'
 
     if 'OUTCAR' in alldata and 'XDATCAR' in alldata:
-        assert alldata['OUTCAR']['atom_num'] == alldata['XDATCAR']['atom_num'], 'Atom numbers in OUTCAR AND XDATCAR do not match'
+        assert alldata['OUTCAR']['atom_num'][-1] == alldata['XDATCAR']['atom_num'][-1], 'Atom numbers in OUTCAR AND XDATCAR do not match'
         traj_len_out = len(alldata['OUTCAR']['xyz'])
         traj_len_xdat = len(alldata['XDATCAR']['xyz'])
         assert traj_len_out == traj_len_xdat, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND XDATCAR ({traj_len_xdat}) do not match'
 
     if 'POSCAR' in alldata and 'CONTCAR' in alldata:
-        assert alldata['POSCAR']['atom_num'] == alldata['CONTCAR']['atom_num'], 'Atom numbers in CONTCAR AND POSCAR do not match'
+        assert alldata['POSCAR']['atom_num0'] == alldata['CONTCAR']['atom_num0'], 'Atom numbers in CONTCAR AND POSCAR do not match'
         assert alldata['POSCAR']['atom_name'] == alldata['CONTCAR']['atom_name'], 'Atom types in CONTCAR AND POSCAR do not match'
 
     if 'POSCAR' in alldata and 'XDATCAR' in alldata:
-        assert alldata['POSCAR']['atom_num'] == alldata['XDATCAR']['atom_num'], 'Atom numbers in OUTCAR AND XDATCAR do not match'
+        assert alldata['POSCAR']['atom_num0'] == alldata['XDATCAR']['atom_num'][0], 'Atom numbers in OUTCAR AND XDATCAR do not match'
         assert alldata['POSCAR']['atom_name'] == alldata['XDATCAR']['atom_name'], 'Atom numbers in OUTCAR AND XDATCAR do not match'
 
     if 'CONTCAR' in alldata and 'XDATCAR' in alldata:
-        assert alldata['CONTCAR']['atom_num'] == alldata['XDATCAR']['atom_num'], 'Atom numbers in CONTCAR AND XDATCAR do not match'
+        assert alldata['CONTCAR']['atom_num0'] == alldata['XDATCAR']['atom_num'][-1], 'Atom numbers in CONTCAR AND XDATCAR do not match'
         assert alldata['CONTCAR']['atom_name'] == alldata['XDATCAR']['atom_name'], 'Atom numbers in CONTCAR AND XDATCAR do not match'
 
     if 'OUTCAR' in alldata and 'OSZICAR' in alldata:

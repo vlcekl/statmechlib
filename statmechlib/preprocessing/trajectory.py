@@ -38,7 +38,61 @@ class Trajectory:
 
 
     def __getitem__(self, key):
-        return self._trajectory[key]
+        """
+        Implement column (property) access and row slicing of trajectories
+
+        Parameters
+        ----------
+        key : str, int, or slice
+            if str, select appropriate property (e.g., box), if slice select
+            configurations in a trajectory
+
+        Returns
+        -------
+        data: ndarray or trajectory object
+              Requested data
+        """
+
+        if isinstance(key, int):
+            if key < 0 : #Handle negative indices
+                key += len( self['xyz'] )
+            if key < 0 or key >= len( self['xyz'] ):
+                raise IndexError(f'The index {key} is out of range.')
+
+            # Create a new instance
+            trj_handle = Trajectory(self, inplace=False)
+            trj_handle._trajectory = dict.fromkeys(self._trajectory)
+
+            #Cycle over trajectory properties and select a particular configuration
+            for k in self._trajectory:
+                if type(self[k]) == list and 'atom_name' not in k and '0' not in k:
+                    trj_handle[k] = self[k][key:key+1]
+                else:
+                    trj_handle[k] = self[k]
+
+            return trj_handle
+
+        elif isinstance(key, slice):
+            # Create a new instance
+            trj_handle = Trajectory(self, inplace=False)
+            trj_handle._trajectory = dict.fromkeys(self._trajectory)
+
+            #Cycle over trajectory properties and select slices of lists
+            for k in self._trajectory:
+                if type(self[k]) == list and 'atom_name' not in k and '0' not in k:
+                    trj_handle[k] = self[k][key.start:key.stop:key.step]
+                else:
+                    trj_handle[k] = self[k]
+
+            return trj_handle
+
+        elif isinstance(key, str) :
+            return self._trajectory[key]
+
+        else:
+            raise TypeError(f'Invalid argument type: {key}: {type(key)}.')
+
+
 
     def __setitem__(self, key, value):
         self._trajectory[key] = value
@@ -64,8 +118,8 @@ class Trajectory:
         # Check that nvt and npt ensembles keep the same particle names, types, and numbers
         if self['ensemble'] == 'nvt' or self['ensemble'] == 'npt':
             assert self['atom_name'] == new_traj['atom_name'], "Append: atom_name does not match"
-            assert self['atom_num'] == new_traj['atom_num'], "Append: atom_num does not match"
-            assert np.array_equal(self['atom_type'][0], new_traj['atom_type'][0]), "Append: atom_type arrays do not match"
+            #assert self['atom_num'] == new_traj['atom_num'], "Append: atom_num does not match"
+            #assert np.array_equal(self['atom_type'][0], new_traj['atom_type'][0]), "Append: atom_type arrays do not match"
 
         # Check that nvt and uvt ensembles have the same box parameters
         if self['ensemble'] == 'nvt' or self['ensemble'] == 'uvt':
@@ -107,18 +161,18 @@ class Trajectory:
             trj_handle = Trajectory(self, inplace=False)
             trj_handle._trajectory = copy.deepcopy(self._trajectory)
 
-        # number of original atoms
-        nat = sum(self['atom_num'])
 
         # system size scaling
         multiply = vec_a*vec_b*vec_c
 
         # multiply atom numbers and types
         trj_handle['atom_name'] = self['atom_name']*multiply
-        trj_handle['atom_num'] = self['atom_num']*multiply
 
         # cycle over trajectory configurations
         for i in range(len(self['box'])):
+            # number of original atoms
+            nat = sum(self['atom_num'][i])
+            trj_handle['atom_num'][i] = self['atom_num'][i]*multiply
 
             # create a new array accommodating the replicated configuration
             new_xyz = np.empty((nat*multiply, 3), dtype=float)
