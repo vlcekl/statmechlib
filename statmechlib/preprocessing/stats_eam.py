@@ -1,4 +1,5 @@
 import numpy as np
+from .pair_dist import pair_dist, pair_dist_cutoff
 
 def get_stats_EAM_pairdist(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None):
     """
@@ -26,13 +27,16 @@ def get_stats_EAM_pairdist(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None)
  
     # set rcut to max if None
     if rcut == None:
-        rcut = 0.5*min(box[0,0], box[1,1], box[2,2])
+        rcut = max(sc)
 
     # get pair distances (absolute and Cartesian components)
     rr, rx = pair_dist_cutoff(xyz, box, rcut)
 
     # number of atoms in configuration
     n_atom = rr.shape[0]
+
+    # number of atoms in the replicated box
+    n_neighbor = rr.shape[1]
     
     # energy-related statistics
     aa = np.empty((n_atom), dtype=float)
