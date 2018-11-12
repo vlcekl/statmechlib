@@ -1,8 +1,13 @@
 import os
 import numpy as np
 import pickle
+import copy
 from .pair_dist import pair_dist
 from .stats_eam import get_stats_EAM
+from .stats_mie import get_stats_Mie
+
+ff_func = {'EAM-cubic-spline':get_stats_EAM,
+           'Mie':get_stats_Mie}
 
 def force_targ(forces):
     """
@@ -119,6 +124,47 @@ def traj_stats(trj_files, get_stats_func, params=None, weights=None):
     return stats_data, target_data
 
 
+def get_stats(trj_datasets, ff_form):
+    """
+    Calculates statisitics for a given trajectory and hyperparameters.
+    
+    Parameters
+    ----------
+    trj_datasets: dict
+             set of trajectories (list of box parameters and particle configurations)
+    ff_form: dict
+             functional form of the force field: potential function and
+             hyperparmeters
+            
+    Returns
+    -------
+    stats_data: dict
+            relevant trajectory statistics and the corresponding hyperparamters
+    """
+
+    stats_data = {}
+
+    params = ff_form['hyperparams']
+    stats_func = ff_func[ff_form['potential']]
+
+    for key, trj in trj_datasets.items():
+    
+        stats_dict = {'energy':[]}
+        
+        for ii, (xyz, box) in enumerate(zip(trj['xyz'], trj['box'])):
+        
+            #a1, ar, a2, f1, fr, f2 = 
+            u_stats, f_stats = stats_func(xyz, box, params)
+
+            stats_dict['energy'].append(u_stats)
+
+        stats_data[key] = stats_dict
+    
+    stats_data['ff_form'] = ff_form
+    
+    return stats_data
+
+
 if __name__ == '__main__':
 
     # trajectory files + directory information
@@ -141,4 +187,5 @@ if __name__ == '__main__':
 
     with open(os.path.join(output_dir, 'target.pickle'), 'wb') as fo:
         pickle.dump(target_data, fo)
+
 

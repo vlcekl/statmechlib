@@ -76,6 +76,10 @@ def get_stats_EAM_pairdist(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None)
         a2[ks] = np.sum(aa**2)
 
     return a1, ar, a2, b1, br, b2
+#    u_stats = np.array([a1, ar, a2])
+#    f_stats = np.array([b1, br, b2])
+#
+#    return u_stats, f_stats
 
 def get_stats_EAM(rr, rx, sc):
     """
@@ -141,4 +145,7 @@ def get_stats_EAM(rr, rx, sc):
         a1[ks] = np.sum(aa)
         a2[ks] = np.sum(aa**2)
 
-    return a1, ar, a2, b1, br, b2
+    u_stats = [a1, ar, a2]
+    f_stats = [b1, br, b2]
+
+    return u_stats, f_stats
