@@ -30,7 +30,8 @@ def force_targ(forces):
         fr = np.concatenate((np.array([0.0]), frc.flatten(), -frc.flatten()))
         force_flat.append(fr)
 
-    return np.array(force_flat)
+    #return np.array(force_flat)
+    return force_flat
 
 
 def traj_stats(trj_files, get_stats_func, params=None, weights=None):

@@ -100,7 +100,7 @@ def f_pair(r, param_a, param_r, za=78, zb=78, ri=1.0, ro=2.0):
 
     return u
 
-def utot_EAM(params, ustats):
+def utot_EAM(params, ustats, hparams=[-1]):
     """
     Calculates configurational energy from EAM sufficient statistics and model parameters
 
@@ -110,6 +110,8 @@ def utot_EAM(params, ustats):
              EAM interaction parameters (spline coefficients array and embedding function parameters)
     ustats : list of lists and floats
              Sufficient statistics for a trajectory of configurations
+    hparams: list of ints
+             hyperparameters - distance cutoff of the density function
 
     Returns
     -------
@@ -119,13 +121,19 @@ def utot_EAM(params, ustats):
 
     n_sample = len(ustats)
 
+    if not hparams:
+        hp = -1
+    else:
+        hp = hparams[0]
+
     # pair interactions from array of spline coefficeints and corresponding statistic
     u_pair = np.array([sum([a*s for a, s in zip(params[2:], ustats[i][2,:])]) for i in range(n_sample)])
 
     # manybody interactions from embedding function parameters and corresponding statistics
-    u_many = np.array([params[0]*ustats[i][0, -1] + params[1]*ustats[i][1, -1] for i in range(n_sample)])
+    u_many = np.array([params[0]*ustats[i][0, hp] + params[1]*ustats[i][1, hp] for i in range(n_sample)])
 
     u_total = 0.5*u_pair + u_many
+    #print(u_pair, u_many, u_total)
 
     return u_total
 
@@ -173,7 +181,7 @@ def ftot_EAM(params, fstats):
     return np.array(f_total)
 
 
-def sd2_loss(params, stats, targets, utot_func, ftot_func=None, dl=0.05, verbose=0):
+def sd2_loss(params, stats, targets, utot_func, ftot_func=None, hparams=None, dl=0.05, verbose=0):
     """
     Calculates squared statistical distance loss function for configurational energies and forces.
 
@@ -195,7 +203,7 @@ def sd2_loss(params, stats, targets, utot_func, ftot_func=None, dl=0.05, verbose
     Returns
     -------
     sd2, sd2f: float
-               squared statistical distances between model and target (energy and force-based)
+               Squared statistical distances between model and target (energy and force-based)
     """
 
     # apply bounds on parametes
@@ -213,9 +221,13 @@ def sd2_loss(params, stats, targets, utot_func, ftot_func=None, dl=0.05, verbose
         w = targ.get('weight', 1.0)
 
         # energy diference array for a given target trajectory
-        uuu = beta*(utot_func(params, u_stat) - u_targ) # array(n_sample)
+        uuu = beta*(utot_func(params, u_stat, hparams) - u_targ) # array(n_sample)
         uuu -= np.mean(uuu)
         eee = np.exp(-uuu)
+        #print('uuu', uuu)
+        #print('utarg', u_targ)
+        #print('ustat', utot_func(params, u_stat))
+        #print('eee', eee)
         
         #print('sd2', utot_EAM(params, u_stat)[0], u_targ[0])
 
@@ -232,9 +244,15 @@ def sd2_loss(params, stats, targets, utot_func, ftot_func=None, dl=0.05, verbose
             betad = beta*dl  # beta * dl
             f_targ = targ['forces'] # target forces (n_sample, 1+6N) (0, 3Nf, -3Nf)
             f_stat = stat['forces'] # force statistics (n_sample, npars, 3N)
+            #print('ftarg', f_targ[-1].shape)
+            #print('fstat', f_stat[-1].shape)
 
             eeh = np.exp(-0.5*uuu)
             fff = ftot_func(params, f_stat) # n_sample *(6N + 1) force contributions
+            #print('s', fff[-1][:])
+            #print('t', f_targ[-1][:])
+            #print('ee', np.mean(np.exp(betad*fff[-1])), eee[-1]*np.mean(np.exp(betad*fff[-1]))) 
+            #print('eall', eee[:])
 
             # target and model force terms
             fpave = np.mean([np.mean(np.exp(betad*f_targ[i])) for i in range(n_sample)])
@@ -246,14 +264,16 @@ def sd2_loss(params, stats, targets, utot_func, ftot_func=None, dl=0.05, verbose
             cb = fhave/(fqave*fpave)**0.5
             if cb > 1: cb = 1
             sd2f += w*np.arccos(cb)**2
+
+            #print('fff', fpave, fqave, fhave, gef, cb, betad)
     
     if verbose > 0:
-        print('loss', sd2+sd2f)
+        print('loss', sd2+sd2f, sd2, sd2f)
     
     return sd2 + sd2f
 
 
-def udif_print(params, stats, targets, utot_func):
+def udif_print(params, stats, targets, utot_func, hparams=None):
     """
     Calculates squared statistical distance loss function for configurational energies and forces.
 
@@ -282,7 +302,7 @@ def udif_print(params, stats, targets, utot_func):
         u_targ = np.array(targ['energy']) # target energies
         u_stat = stat['energy'] # energy statistics
 
-        opti_out.append(list(utot_func(params, u_stat)))
+        opti_out.append(list(utot_func(params, u_stat, hparams)))
         targ_out.append(list(u_targ))
     
     return opti_out, targ_out
