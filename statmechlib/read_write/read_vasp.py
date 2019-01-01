@@ -341,7 +341,7 @@ def read_incar(filename):
     traj = {}
     return traj
 
-def read_vasp(vasp_dir, verbose=True):
+def read_vasp(vasp_dir, verbose=False):
     """
     Reads configuration and energy files from a VASP MD simulation in a given directory
     and returns trajectory data in a dictionary.

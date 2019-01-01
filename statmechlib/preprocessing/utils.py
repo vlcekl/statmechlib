@@ -1,5 +1,39 @@
 import numpy as np
-#import pandas as pd
+
+eos_params = {
+    'W':{'l':0.274, 'r_wse':1.584, 'eta':5.69, 'dE':8.9}
+}
+
+def universal_eos(x, system):
+    """
+    Universal equation of state for a given system.
+
+    Parameters
+    ----------
+    x: float
+       lattice expansion/compression parameter
+    system: str
+       system (element) id
+
+    Returns
+    -------
+    end: float
+         Energy of the crystal lattice for a given x
+    """
+
+    syst = eos_params[system]
+    l = syst['l']
+    r_wse = syst['r_wse']
+    eta = syst['eta']
+    dE = syst['dE']
+
+    a = (x - 1.0)*r_wse/l
+    ene = np.exp(-a)
+    ene *= -1.0 - a - 0.05*a**3
+    ene *= dE
+
+    return ene
+
 
 def normalize_histogram(hist, columns='all'):
     """

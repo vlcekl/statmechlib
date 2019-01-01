@@ -3,10 +3,11 @@ import numpy as np
 import pickle
 import copy
 from .pair_dist import pair_dist
-from .stats_eam import get_stats_EAM
+from .stats_eam import get_stats_EAM_per_atom, get_stats_EAM_per_box
 from .stats_mie import get_stats_Mie
+from .utils import universal_eos
 
-ff_func = {'EAM-cubic-spline':get_stats_EAM,
+ff_func = {'EAM-cubic-spline':get_stats_EAM_per_atom,
            'Mie':get_stats_Mie}
 
 def force_targ(forces):
@@ -165,6 +166,48 @@ def get_stats(trj_datasets, ff_form):
     
     return stats_data
 
+def select_nodes(stats_input, index):
+    """
+    Select only configuration statistics from stats (spline nodes) that are given in index.
+    """
+    
+    stats_select = copy.deepcopy(stats_input)
+    
+    for key, stats in stats_select.items():
+        if type(stats) == dict and 'energy' in stats.keys():
+            for i, conf in enumerate(stats['energy']):
+                new_conf = np.empty((3, sum(index)), dtype=float)
+                new_conf[0] = conf[0][index]
+                new_conf[1] = conf[1][index]
+                new_conf[2] = conf[2][index]
+                stats['energy'][i] = new_conf
+                
+    stats_select['hyperparams'] = list(np.array(stats_select['hyperparams'])[index])
+
+    return stats_select
+
+def scale_configuration(trj, scale):
+    """
+    Scales box size by 10 to separate all atoms beyond cutoff, and sets energies and forces to 0.
+    
+    Parameters
+    ----------
+    trj: Trajectory object (or dict)
+         Trajectory to be rescaled
+    
+    Returns
+    -------
+    trj: Trajectory object (or dict)
+         Rescaled trajectory
+    """
+    trj['box'][0] = trj['box'][0]*scale
+    trj['box0'] = trj['box0']*scale
+    trj['energy'][0] = universal_eos(scale)*len(trj['xyz'][0])
+    trj['free_energy'][0] = universal_eos(scale)*len(trj['xyz'][0])
+    trj['total_energy'][0] = universal_eos(scale)*len(trj['xyz'][0])
+    trj['forces'][0] = np.zeros_like(trj['forces'][0])
+    return trj
+
 
 if __name__ == '__main__':
 
@@ -188,5 +231,4 @@ if __name__ == '__main__':
 
     with open(os.path.join(output_dir, 'target.pickle'), 'wb') as fo:
         pickle.dump(target_data, fo)
-
 

@@ -209,6 +209,34 @@ class Trajectory:
         if not inplace:
             return trj_handle
 
+    def set_zero_energy(self, zero_energy, inplace=True):
+        """
+        Sets energy of infinitely separated atoms to zero by subtracting
+        intra-atomic energy of all system atoms.
+
+        Parameters
+        ----------
+        zero_energy: float
+                     energy of an isolated atom
+        inplace: bool
+                 scale energy of the current trajectory (True) or make a new one (False)
+        """
+
+        # set trajectory object handle
+        if inplace:
+            trj_handle = self
+        else:
+            trj_handle = Trajectory(self, inplace=False)
+            trj_handle._trajectory = copy.deepcopy(self._trajectory)
+
+        for key, trj in trj_handle._trajectory.items():
+            if 'energy' in key:
+                for i in range(len(trj_handle[key])):
+                    trj_handle[key][i] -= zero_energy*trj_handle['xyz'][i].shape[0]
+
+        if not inplace:
+            return trj_handle
+
 
 
     def to_xyz(self, file_name):

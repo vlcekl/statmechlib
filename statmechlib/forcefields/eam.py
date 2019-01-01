@@ -100,7 +100,70 @@ def f_pair(r, param_a, param_r, za=78, zb=78, ri=1.0, ro=2.0):
 
     return u
 
-def utot_EAM(params, ustats, hparams=[-1]):
+def utot_EAM_per_atom(params, ustats, hparams=[2, 6, 0]):
+    """
+    Calculates configurational energy from EAM sufficient statistics and model parameters
+
+    Parameters
+    ----------
+    params : list of lists and floats
+             EAM interaction parameters (spline coefficients array and embedding function parameters)
+    ustats : list of lists and floats
+             Sufficient statistics for a trajectory of configurations
+    hparams: list of ints
+             hyperparameters - numbers of embedding function coeffs, pair coeffs, and density function coeffs
+
+    Returns
+    -------
+    u_total: float
+             total configurational energy (sum of pair and manybody interactions) for trajectory of configurations
+    """
+
+    n_sample = len(ustats)
+
+    if not hparams:
+        # pair interaction coefficients
+        hp = params[2:]
+        # electronic density coefficients. Default single coefficient with value 1
+        hd = [1.0]
+    else:
+        # pair interaction coefficients
+        hp = params[hparams[0]:sum(hparams[0:2])]
+        # electronic density coefficients. The first coefficient is always 1
+        hd = [1.0] + params[sum(hparams[0:2]):sum(hparams)]
+
+    # pair interactions (per box) from array of spline coefficeints and corresponding statistic
+    # sum over spline components, make array over samples
+    u_pair = np.array([sum([a*s for a, s in zip(hp, ustats[i][2,:])]) for i in range(n_sample)])
+
+    # cycle over samples for manybody interactions
+    embed_r = []
+    embed_2 = []
+    for i in range(n_sample):
+        # calculate electronic density for each atom
+        # coefficient for the last spline section is 1 by definition
+        # rho_func.shape should be (n_atom, )
+        rho_func = sum([p*s for p, s in zip(hd, ustats[i][3,:])]) 
+        assert rho_func.shape[0] == ustats[i][2,0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2,0].shape[0]}"
+
+        # sum sqrt and squared atom contributions to embedding function
+        embed_r.append(np.sum(np.sqrt(rho_func)))
+        embed_2.append(np.sum(rho_func**2))
+
+
+    # manybody interactions from embedding function parameters and corresponding statistics
+    # u_many = np.array([params[0]*ustats[i][0, hp] + params[1]*ustats[i][1, hp] for i in range(n_sample)])
+    u_many = np.array([params[0]*embed_r[i] + params[1]*embed_2[i] for i in range(n_sample)])
+
+
+    assert u_pair.shape == u_many.shape, f"Shapes of u_pair ({u_pair.shape}) and u_many ({u_many.shape}) do not match."
+
+    u_total = 0.5*u_pair + u_many
+    #print(u_pair, u_many, u_total)
+
+    return u_total
+
+def utot_EAM_per_box(params, ustats, hparams=[-1]):
     """
     Calculates configurational energy from EAM sufficient statistics and model parameters
 

@@ -35,7 +35,7 @@ def read_histfile(filename):
 
             sarr = re.findall('\S+', line)
 
-            assert abs(float(sarr[2]) - float(sarr[3])) < 0.001, f"Energies and statistics do not match {float(sarr[1])} {float(sarr[2])}"
+            assert abs(float(sarr[2]) - float(sarr[3])) < 0.01, f"Energies and statistics do not match {float(sarr[2])} {float(sarr[3])}"
             enes.append(float(sarr[2]))
 
             line = fi.readline()
