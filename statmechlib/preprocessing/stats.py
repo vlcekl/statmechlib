@@ -166,9 +166,17 @@ def get_stats(trj_datasets, ff_form):
     
     return stats_data
 
-def select_nodes(stats_input, index):
+def select_nodes(stats_input, p_index, m_index):
     """
     Select only configuration statistics from stats (spline nodes) that are given in index.
+    Parameters
+    ----------
+    stats_input: dict
+               statistics for all nodes
+    p_index: list
+             list of spline knots used for pair interactions
+    m_index: list
+             list of spline knots used for density function in manybody interactions
     """
     
     stats_select = copy.deepcopy(stats_input)
@@ -176,13 +184,16 @@ def select_nodes(stats_input, index):
     for key, stats in stats_select.items():
         if type(stats) == dict and 'energy' in stats.keys():
             for i, conf in enumerate(stats['energy']):
-                new_conf = np.empty((3, sum(index)), dtype=float)
-                new_conf[0] = conf[0][index]
-                new_conf[1] = conf[1][index]
-                new_conf[2] = conf[2][index]
+                #new_conf = np.empty((3, sum(index)), dtype=float)
+                #new_conf[0] = conf[0][index]
+                #new_conf[1] = conf[1][index]
+                #new_conf[2] = conf[2][index]
+                new_conf =  [c[p_index] for c in conf[0:3]]
+                new_conf.append(conf[3][m_index])
                 stats['energy'][i] = new_conf
                 
-    stats_select['hyperparams'] = list(np.array(stats_select['hyperparams'])[index])
+    stats_select['hyperparams']['pair'] = list(np.array(stats_select['hyperparams']['pair'])[p_index])
+    stats_select['hyperparams']['embed'] = list(np.array(stats_select['hyperparams']['embed'])[m_index])
 
     return stats_select
 

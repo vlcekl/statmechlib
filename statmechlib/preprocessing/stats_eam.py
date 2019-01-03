@@ -1,7 +1,7 @@
 import numpy as np
 from .pair_dist import pair_dist, pair_dist_cutoff
 
-def get_stats_EAM_per_atom(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None):
+def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None):
     """
     Takes atom pair distances and calculates per atom-statistics needed
     for the parameterization of a cubic spline-based EAM model similar to
@@ -10,12 +10,14 @@ def get_stats_EAM_per_atom(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None)
  
     Parameters
     ----------
-    rr : numpy array
-         set of pair distances
-    rx : numpy array
-         set of pair distance coordinates
+    config: tuple(2)
+            xyz and box information about a particular configuration
+    atom_type: list of int
+            atom type ids
     sc : python list of floats
          spline knots
+    rcut: float
+          potential cutoff distance
 
     Returns
     -------
@@ -30,6 +32,9 @@ def get_stats_EAM_per_atom(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None)
     # set rcut to max if None
     if rcut == None:
         rcut = max(sc)
+
+    xyz = config[0]
+    box = config[1]
 
     # get pair distances (absolute and Cartesian components)
     rr, rx = pair_dist_cutoff(xyz, box, rcut)

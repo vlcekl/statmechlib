@@ -100,7 +100,7 @@ def f_pair(r, param_a, param_r, za=78, zb=78, ri=1.0, ro=2.0):
 
     return u
 
-def utot_EAM_per_atom(params, ustats, hparams=[2, 6, 0]):
+def utot_EAM_per_atom(params, ustats, hparams=None):
     """
     Calculates configurational energy from EAM sufficient statistics and model parameters
 
@@ -110,8 +110,8 @@ def utot_EAM_per_atom(params, ustats, hparams=[2, 6, 0]):
              EAM interaction parameters (spline coefficients array and embedding function parameters)
     ustats : list of lists and floats
              Sufficient statistics for a trajectory of configurations
-    hparams: list of ints
-             hyperparameters - numbers of embedding function coeffs, pair coeffs, and density function coeffs
+    hparams: dict of lists
+             hyperparameters - spline knots for pair potential and density function
 
     Returns
     -------
@@ -121,20 +121,34 @@ def utot_EAM_per_atom(params, ustats, hparams=[2, 6, 0]):
 
     n_sample = len(ustats)
 
-    if not hparams:
+    #print('hparams', hparams)
+    #print('params', params)
+
+    # assign parameters to different functions
+    if not hparams: # no hparams given
         # pair interaction coefficients
         hp = params[2:]
         # electronic density coefficients. Default single coefficient with value 1
         hd = [1.0]
     else:
         # pair interaction coefficients
-        hp = params[hparams[0]:sum(hparams[0:2])]
+        npair = len(hparams['pair'])
+        hp = params[2:2+npair]
         # electronic density coefficients. The first coefficient is always 1
-        hd = [1.0] + params[sum(hparams[0:2]):sum(hparams)]
+
+        ndens = len(hparams['embed'])
+        assert 2+npair+ndens-1 == len(params), f"Wrong number of parameters: {len(params)} vs. {2+npair+ndens-1}"
+        if ndens > 1:
+            hd = params[2+npair:2+npair+ndens-1] + [1.0]
+        else:
+            hd = [1.0]
+        #print('n', npair, ndens, len(params))
+        #print('hp', hp)
+        #print('hd', hd)
 
     # pair interactions (per box) from array of spline coefficeints and corresponding statistic
     # sum over spline components, make array over samples
-    u_pair = np.array([sum([a*s for a, s in zip(hp, ustats[i][2,:])]) for i in range(n_sample)])
+    u_pair = np.array([sum([a*s for a, s in zip(hp, ustats[i][2][:])]) for i in range(n_sample)])
 
     # cycle over samples for manybody interactions
     embed_r = []
@@ -143,8 +157,12 @@ def utot_EAM_per_atom(params, ustats, hparams=[2, 6, 0]):
         # calculate electronic density for each atom
         # coefficient for the last spline section is 1 by definition
         # rho_func.shape should be (n_atom, )
-        rho_func = sum([p*s for p, s in zip(hd, ustats[i][3,:])]) 
-        assert rho_func.shape[0] == ustats[i][2,0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2,0].shape[0]}"
+        rho_func = sum([p*s for p, s in zip(hd, ustats[i][3][:])]) 
+        #print('ppp', hd)
+        #print('types', type(rho_func), type(ustats[i][3][0]), ustats[i][3][0].shape)
+        #print('ustats', type(ustats[i][3]), ustats[i][3].shape)
+        #print('rhofunc', rho_func)
+        assert rho_func.shape[0] == ustats[i][3][0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2][0].shape[0]}"
 
         # sum sqrt and squared atom contributions to embedding function
         embed_r.append(np.sum(np.sqrt(rho_func)))
@@ -152,7 +170,7 @@ def utot_EAM_per_atom(params, ustats, hparams=[2, 6, 0]):
 
 
     # manybody interactions from embedding function parameters and corresponding statistics
-    # u_many = np.array([params[0]*ustats[i][0, hp] + params[1]*ustats[i][1, hp] for i in range(n_sample)])
+    # u_many = np.array([params[0]*ustats[i][0][hp] + params[1]*ustats[i][1][hp] for i in range(n_sample)])
     u_many = np.array([params[0]*embed_r[i] + params[1]*embed_2[i] for i in range(n_sample)])
 
 
@@ -190,10 +208,10 @@ def utot_EAM_per_box(params, ustats, hparams=[-1]):
         hp = hparams[0]
 
     # pair interactions from array of spline coefficeints and corresponding statistic
-    u_pair = np.array([sum([a*s for a, s in zip(params[2:], ustats[i][2,:])]) for i in range(n_sample)])
+    u_pair = np.array([sum([a*s for a, s in zip(params[2:], ustats[i][2][:])]) for i in range(n_sample)])
 
     # manybody interactions from embedding function parameters and corresponding statistics
-    u_many = np.array([params[0]*ustats[i][0, hp] + params[1]*ustats[i][1, hp] for i in range(n_sample)])
+    u_many = np.array([params[0]*ustats[i][0][hp] + params[1]*ustats[i][1][hp] for i in range(n_sample)])
 
     u_total = 0.5*u_pair + u_many
     #print(u_pair, u_many, u_total)
@@ -227,12 +245,12 @@ def ftot_EAM(params, fstats):
     for i in range(n_sample):
 
         # pair interactions from array of spline coefficeints and corresponding statistic
-        f_pair = sum([p*s for p, s in zip(params[2:], fstats[i][2,:])]) 
+        f_pair = sum([p*s for p, s in zip(params[2:], fstats[i][2][:])]) 
 
         # manybody interactions from embedding function parameters and corresponding statistics
-        f_many = params[0]*fstats[i][0,-1] + params[1]*fstats[i][1, -1]
+        f_many = params[0]*fstats[i][0][-1] + params[1]*fstats[i][1][-1]
         
-        n_atom = fstats[i][0,0].shape[0]
+        n_atom = fstats[i][0][0].shape[0]
         # Create a 6N + 1 array of 0, f, and -f
         fx = np.zeros((6*n_atom + 1), dtype=float)
         fx[1:3*n_atom+1] = 0.5*f_pair.flatten() + f_many.flatten()
@@ -244,7 +262,7 @@ def ftot_EAM(params, fstats):
     return np.array(f_total)
 
 
-def sd2_loss(params, stats, targets, utot_func, ftot_func=None, hparams=None, dl=0.05, verbose=0):
+def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose=0):
     """
     Calculates squared statistical distance loss function for configurational energies and forces.
 
@@ -252,10 +270,10 @@ def sd2_loss(params, stats, targets, utot_func, ftot_func=None, hparams=None, dl
     ----------
     params : list of lists and floats
              EAM interaction parameters (spline coefficients array and embedding function parameters)
-    stats  : list of lists and floats
-             Sufficient statistics
-    targets: list of lists and floats
+    targets: dict of dicts
              target energies and forces
+    stats  : dict of dicts
+             Statistics describing particle configurations
     utot_func: function
                takes parameters and statistics and returns configurational energies
     ftot_func: function
@@ -273,9 +291,14 @@ def sd2_loss(params, stats, targets, utot_func, ftot_func=None, hparams=None, dl
     #p = np.where(p < -1.0, -1.0, p)
     #p = np.where(p >  1.0,  1.0, p)
 
+    hparams = stats['hyperparams']
+
     # cycle over target system trajectories and statistics to determine SD
     sd2 = sd2f = 0.0
-    for targ, stat in zip(targets, stats):
+    for key in targets.keys():
+
+        targ = targets[key]
+        stat = stats[key]
 
         beta = np.mean(targ['beta']) # system inverse temperature
         u_targ = np.array(targ['energy']) # target energies
@@ -284,6 +307,7 @@ def sd2_loss(params, stats, targets, utot_func, ftot_func=None, hparams=None, dl
         w = targ.get('weight', 1.0)
 
         # energy diference array for a given target trajectory
+        #print('all hparams:', key, hparams)
         uuu = beta*(utot_func(params, u_stat, hparams) - u_targ) # array(n_sample)
         uuu -= np.mean(uuu)
         eee = np.exp(-uuu)
@@ -295,7 +319,7 @@ def sd2_loss(params, stats, targets, utot_func, ftot_func=None, hparams=None, dl
         #print('sd2', utot_EAM(params, u_stat)[0], u_targ[0])
 
         # are we using forces?
-        if (not ftot_func) and ('forcesx' not in targ):
+        if (not ftot_func) or ('forcesx' not in targ):
 
             # energy-based free energy difference and statistical distance
             ge = -np.log(np.mean(eee))   # free energy difference (shifted)
@@ -336,7 +360,7 @@ def sd2_loss(params, stats, targets, utot_func, ftot_func=None, hparams=None, dl
     return sd2 + sd2f
 
 
-def udif_print(params, stats, targets, utot_func, hparams=None):
+def udif_print(params, targets, stats, utot_func, hparams=None):
     """
     Calculates squared statistical distance loss function for configurational energies and forces.
 
@@ -344,10 +368,10 @@ def udif_print(params, stats, targets, utot_func, hparams=None):
     ----------
     params : list of lists and floats
              EAM interaction parameters (spline coefficients array and embedding function parameters)
-    stats  : list of lists and floats
-             Sufficient statistics
     targets: list of lists and floats
              target energies and forces
+    stats  : list of lists and floats
+             Sufficient statistics
     utot_func: function
                takes parameters and statistics and returns configurational energies
 
@@ -357,6 +381,8 @@ def udif_print(params, stats, targets, utot_func, hparams=None):
             model and target configurational energies
     """
     
+    hparams = stats['hyperparams']
+
     opti_out = []
     targ_out = []
     # cycle over target system trajectories and statistics to determine SD
