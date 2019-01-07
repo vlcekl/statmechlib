@@ -138,16 +138,16 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
 
         ndens = len(hparams['edens'])
         assert 2+npair+ndens-1 == len(params), f"Wrong number of parameters: {len(params)} vs. {2+npair+ndens-1}"
-        #print('ndens', ndens, hparams['edens'])
+        print('ndens', ndens, hparams['edens'])
         if ndens > 1:
-            hd = np.concatenate((params[2+npair:2+npair+ndens-1], [1.0]))
-            #print('hda', hd, hparams['edens'], type(params))
+            hd = params[2+npair:2+npair+ndens-1] + [1.0]
+            print('hda', hd, hparams['edens'])
         else:
             hd = [1.0]
-        #print('hdtest', params[2+npair:2+npair+ndens-1], hparams['edens'])
-    #print('n', npair, ndens, len(params))
-    #print('hp', hp)
-    #print('hd', hd)
+        print('hdtest', params[2+npair:2+npair+ndens-1], hparams['edens'])
+    print('n', npair, ndens, len(params))
+    print('hp', hp)
+    print('hd', hd)
 
     # pair interactions (per box) from array of spline coefficeints and corresponding statistic
     # sum over spline components, make array over samples
@@ -180,7 +180,7 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
     assert u_pair.shape == u_many.shape, f"Shapes of u_pair ({u_pair.shape}) and u_many ({u_many.shape}) do not match."
 
     u_total = 0.5*u_pair + u_many
-    #print(u_pair, u_many, u_total)
+    print(u_pair, u_many, u_total)
 
     return u_total
 
@@ -271,7 +271,7 @@ def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose
 
     Parameters
     ----------
-    params : ndarray of floats
+    params : list of lists and floats
              EAM interaction parameters (spline coefficients array and embedding function parameters)
     targets: dict of dicts
              target energies and forces
@@ -359,12 +359,12 @@ def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose
     
     if verbose > 0:
         print('loss', sd2+sd2f, sd2, sd2f)
-        #print('params', params, type(params))
+        print('params', params)
     
     return sd2 + sd2f
 
 
-def udif_print(params, targets, stats, utot_func):
+def udif_print(params, targets, stats, utot_func, hparams=None):
     """
     Calculates squared statistical distance loss function for configurational energies and forces.
 

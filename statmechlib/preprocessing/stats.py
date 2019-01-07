@@ -193,7 +193,7 @@ def select_nodes(stats_input, p_index, m_index):
                 stats['energy'][i] = new_conf
                 
     stats_select['hyperparams']['pair'] = list(np.array(stats_select['hyperparams']['pair'])[p_index])
-    stats_select['hyperparams']['embed'] = list(np.array(stats_select['hyperparams']['embed'])[m_index])
+    stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'])[m_index])
 
     return stats_select
 
