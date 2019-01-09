@@ -10,7 +10,6 @@ except:
 import sys
 import re
 import numpy as np
-import h5py
 import copy
 
 class Trajectory:
@@ -99,8 +98,7 @@ class Trajectory:
             return self._trajectory[key]
 
         else:
-            raise TypeError('Invalid argument type: {}: {}.'.format(key, type(key))
-
+            raise TypeError('Invalid argument type: {}: {}.'.format(key, type(key)))
 
 
     def __setitem__(self, key, value):
@@ -268,7 +266,7 @@ class Trajectory:
                 bx, by, bz = box[1,0], box[1,1], box[1,2]
                 cx, cy, cz = box[2,0], box[2,1], box[2,2]
                 #f.write(f'{ax} {ay} {az} {bx} {by} {bz} {cx} {cy} {cz}\n')
-                f.write('{} {} {} {} {} {} {} {} {}\n'.format(ax, ay, az, bx, by, bz, cx, cy, cz)
+                f.write('{} {} {} {} {} {} {} {} {}\n'.format(ax, ay, az, bx, by, bz, cx, cy, cz))
 
                 # write atom coordinates
                 i = 0
@@ -276,6 +274,6 @@ class Trajectory:
                     for _ in range(atom_num):
                         x, y, z = (box.T).dot(xyz[i])
                         #f.write(f'{atom_name} {x} {y} {z}\n')
-                        f.write('{} {} {} {}\n'.format(atom_name, x, y, z)
+                        f.write('{} {} {} {}\n'.format(atom_name, x, y, z))
                         i += 1
 
