@@ -12,7 +12,7 @@ import re
 import numpy as np
 import copy
 
-class Trajectory:
+class Trajectory(object):
     """
     Class that stores a trajectory of particle coordinates with methods for
     manipulation of the trajectory data (e.g., append, merge, sample, select, ...)
