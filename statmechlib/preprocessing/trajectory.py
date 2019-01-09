@@ -66,7 +66,7 @@ class Trajectory:
             if key < 0 : #Handle negative indices
                 key += len( self['xyz'] )
             if key < 0 or key >= len( self['xyz'] ):
-                raise IndexError(f'The index {key} is out of range.')
+                raise IndexError('The index {} is out of range.'.format(key))
 
             # Create a new instance
             trj_handle = Trajectory(self, inplace=False)
@@ -99,7 +99,7 @@ class Trajectory:
             return self._trajectory[key]
 
         else:
-            raise TypeError(f'Invalid argument type: {key}: {type(key)}.')
+            raise TypeError('Invalid argument type: {}: {}.'.format(key, type(key))
 
 
 
@@ -260,19 +260,22 @@ class Trajectory:
 
                 # write total number of atoms
                 nat = sum(self['atom_num'])
-                f.write(f'{nat}\n')
+                #f.write(f'{nat}\n')
+                f.write('{}\n'.format(nat))
 
                 # write box parameters
                 ax, ay, az = box[0,0], box[0,1], box[0,2]
                 bx, by, bz = box[1,0], box[1,1], box[1,2]
                 cx, cy, cz = box[2,0], box[2,1], box[2,2]
-                f.write(f'{ax} {ay} {az} {bx} {by} {bz} {cx} {cy} {cz}\n')
+                #f.write(f'{ax} {ay} {az} {bx} {by} {bz} {cx} {cy} {cz}\n')
+                f.write('{} {} {} {} {} {} {} {} {}\n'.format(ax, ay, az, bx, by, bz, cx, cy, cz)
 
                 # write atom coordinates
                 i = 0
                 for atom_name, atom_num in zip(self['atom_name'], self['atom_num']):
                     for _ in range(atom_num):
                         x, y, z = (box.T).dot(xyz[i])
-                        f.write(f'{atom_name} {x} {y} {z}\n')
+                        #f.write(f'{atom_name} {x} {y} {z}\n')
+                        f.write('{} {} {} {}\n'.format(atom_name, x, y, z)
                         i += 1
 
