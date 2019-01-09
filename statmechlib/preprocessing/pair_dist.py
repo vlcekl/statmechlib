@@ -1,3 +1,12 @@
+from __future__ import print_function, unicode_literals
+from __future__ import absolute_import, division
+try:
+    xrange = xrange
+    # We have Python 2
+except:
+    xrange = range
+    # We have Python 3
+
 import numpy as np
 
 def cfg_replicate(xyz, box, vec_a=1, vec_b=1, vec_c=1):

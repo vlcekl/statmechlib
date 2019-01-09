@@ -1,3 +1,11 @@
+from __future__ import print_function, unicode_literals
+from __future__ import absolute_import, division
+try:
+    xrange = xrange
+    # We have Python 2
+except:
+    xrange = range
+    # We have Python 3
 
 # LAMMPS format
 with open(os.path.join(pot_path, 'W_lv.eam.fs'), 'w') as fo:
