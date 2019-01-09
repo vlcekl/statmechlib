@@ -94,7 +94,7 @@ class Trajectory(object):
 
             return trj_handle
 
-        elif isinstance(key, str) :
+        elif isinstance(key, str) or isinstance(key, unicode):
             return self._trajectory[key]
 
         else:
