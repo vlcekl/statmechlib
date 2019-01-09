@@ -1,4 +1,4 @@
-from __future__ import print_function, unicode_literals
+from __future__ import print_function#, unicode_literals
 from __future__ import absolute_import, division
 try:
     xrange = xrange
@@ -149,7 +149,8 @@ def read_xdatcar(filename):
                 # create a list of atom types from atom_name and atom_num
                 atom_types.append(make_atom_types(atom_nums[-1]))
 
-                assert len(atom_types[-1]) == nat, f'Length of atom_types {len(atom_types[-1])} does not match number of atoms {nat}'
+                #assert len(atom_types[-1]) == nat, f'Length of atom_types {len(atom_types[-1])} does not match number of atoms {nat}'
+                assert len(atom_types[-1]) == nat, 'Length of atom_types {} does not match number of atoms {}'.format(len(atom_types[-1]), nat)
 
                 line = fc.readline()
 
@@ -248,7 +249,8 @@ def read_outcar(filename):
                 xyz = np.empty((nat, 3), dtype=np.float64)
                 xyz[:,:] = data[:,0:3]
             
-                assert len(xyzs) + 1 == len(boxs), f'lengths of xyzs {len(xyzs)+1} and boxs {len(boxs)} do not match'
+                #assert len(xyzs) + 1 == len(boxs), f'lengths of xyzs {len(xyzs)+1} and boxs {len(boxs)} do not match'
+                assert len(xyzs) + 1 == len(boxs), 'lengths of xyzs {} and boxs {} do not match'.format(len(xyzs)+1, len(boxs))
             
                 # convert cartesian coordinates into lattice units
                 box_inv = np.linalg.inv(boxs[-1].T)
@@ -264,7 +266,8 @@ def read_outcar(filename):
                 # create a list of atom types from atom_nums
                 atom_nums.append(atnums)
                 atom_types.append(make_atom_types(atom_nums[-1]))
-                assert len(atom_types[-1]) == sum(atom_nums[-1]), f'Length of atom_types {len(atom_types[-1])} does not match number of atoms {sum(atom_nums)}'
+                #assert len(atom_types[-1]) == sum(atom_nums[-1]), f'Length of atom_types {len(atom_types[-1])} does not match number of atoms {sum(atom_nums)}'
+                assert len(atom_types[-1]) == sum(atom_nums[-1]), 'Length of atom_types {} does not match number of atoms {}'.format(len(atom_types[-1]), sum(atom_nums))
             
             # E0 energy without entropy for sigma->0
             elif re.search('FREE ENERG.*\s+OF\s+THE\s+ION.ELECTRON\s+SYSTEM\s+\(eV\)', line):
@@ -305,13 +308,19 @@ def read_outcar(filename):
 
 
     # check if the lengths of trajectory lists match
-    assert len(enes) == len(xyzs), f'{dataset} energy and XYZ lenghts do not match: {len(enes)}, {len(xyzs)}'
-    assert len(atom_types) == len(xyzs), f'{dataset} atom_types and XYZ lenghts do not match: {len(atom_types)}, {len(xyzs)}'
+    #assert len(enes) == len(xyzs), f'{dataset} energy and XYZ lenghts do not match: {len(enes)}, {len(xyzs)}'
+    assert len(enes) == len(xyzs), '{} energy and XYZ lenghts do not match: {}, {}'.format(dataset, len(enes), len(xyzs))
+    #assert len(atom_types) == len(xyzs), f'{dataset} atom_types and XYZ lenghts do not match: {len(atom_types)}, {len(xyzs)}'
+    assert len(atom_types) == len(xyzs), '{} atom_types and XYZ lenghts do not match: {}, {}'.format(dataset, len(atom_types), len(xyzs))
     
     # combine trajectory data in a dictionary
     traj = {'box':boxs, 'xyz':xyzs, 'atom_type':atom_types, 'energy':enes, 'forces':forces, 'temp':temps}
-    traj.update({'free_energy':enes_free, 'total_energy':enes_tot, 'atom_num':atom_nums})
+    traj.update({'atom_num':atom_nums})
     traj.update({'ensemble':ensemble})
+    if len(enes_tot) > 0:
+        traj.update({'total_energy':enes_tot})
+    if len(enes_free) > 0:
+        traj.update({'free_energy':enes_free})
     
     return traj
 
@@ -389,15 +398,18 @@ def read_vasp(vasp_dir, verbose=False):
 
         if file_names:
             # make sure maximum one file of each type exists in the directory
-            assert len(file_names) <= 1, f'Too many files of type {file_name}.'
+            #assert len(file_names) <= 1, f'Too many files of type {file_name}.'
+            assert len(file_names) <= 1, 'Too many files of type {}.'.format(file_name)
 
             if os.path.isfile(file_names[0]):
                 if verbose:
-                    print(f"Reading {file_names[0]}")
+                    #print(f"Reading {file_names[0]}")
+                    print("Reading {}".format(file_names[0]))
 
                 alldata[file_name] = read_func(file_names[0])
             else:
-                print(f'{file_name} not present')
+                #print(f'{file_name} not present')
+                print('{} not present'.format(file_name))
 
 
     # Perform consistency checks between data from different VASP files
@@ -419,7 +431,8 @@ def read_vasp(vasp_dir, verbose=False):
         assert alldata['OUTCAR']['atom_num'][-1] == alldata['XDATCAR']['atom_num'][-1], 'Atom numbers in OUTCAR AND XDATCAR do not match'
         traj_len_out = len(alldata['OUTCAR']['xyz'])
         traj_len_xdat = len(alldata['XDATCAR']['xyz'])
-        assert traj_len_out == traj_len_xdat, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND XDATCAR ({traj_len_xdat}) do not match'
+        #assert traj_len_out == traj_len_xdat, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND XDATCAR ({traj_len_xdat}) do not match'
+        assert traj_len_out == traj_len_xdat, 'Trajectory lengths in OUTCAR ({}) AND XDATCAR ({}) do not match'.format(traj_len_out, traj_len_xdat)
 
     if 'POSCAR' in alldata and 'CONTCAR' in alldata:
         assert alldata['POSCAR']['atom_num0'] == alldata['CONTCAR']['atom_num0'], 'Atom numbers in CONTCAR AND POSCAR do not match'
@@ -436,7 +449,12 @@ def read_vasp(vasp_dir, verbose=False):
     if 'OUTCAR' in alldata and 'OSZICAR' in alldata:
         traj_len_out = len(alldata['OUTCAR']['energy'])
         traj_len_oszi = len(alldata['OSZICAR']['energy'])
-        assert traj_len_out == traj_len_oszi, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND OSZICAR ({traj_len_oszi}) do not match'
+        #assert traj_len_out == traj_len_oszi, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND OSZICAR ({traj_len_oszi}) do not match'
+        assert traj_len_out == traj_len_oszi, 'Trajectory lengths (energy) in OUTCAR ({}) AND XDATCAR ({}) do not match'.format(traj_len_out, traj_len_oszi)
+        #traj_len_out = len(alldata['OUTCAR']['total_energy'])
+        #traj_len_oszi = len(alldata['OSZICAR']['total_energy'])
+        #assert traj_len_out == traj_len_oszi, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND OSZICAR ({traj_len_oszi}) do not match'
+        #assert traj_len_out == traj_len_oszi, 'Trajectory (total_energy) lengths in OUTCAR ({}) AND XDATCAR ({}) do not match'.format(traj_len_out, traj_len_oszi)
 
     # Check numerical values of boxes, coordinates, energies, and temperatures
 

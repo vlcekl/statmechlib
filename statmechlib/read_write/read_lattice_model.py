@@ -1,4 +1,4 @@
-from __future__ import print_function, unicode_literals
+from __future__ import print_function #, unicode_literals
 from __future__ import absolute_import, division
 try:
     xrange = xrange
@@ -44,7 +44,8 @@ def read_histfile(filename):
 
             sarr = re.findall('\S+', line)
 
-            assert abs(float(sarr[2]) - float(sarr[3])) < 0.01, f"Energies and statistics do not match {float(sarr[2])} {float(sarr[3])}"
+            #assert abs(float(sarr[2]) - float(sarr[3])) < 0.01, f"Energies and statistics do not match {float(sarr[2])} {float(sarr[3])}"
+            assert abs(float(sarr[2]) - float(sarr[3])) < 0.01, "Energies and statistics do not match {} {}".format(float(sarr[2]), float(sarr[3]))
             enes.append(float(sarr[2]))
 
             line = fi.readline()
@@ -140,11 +141,13 @@ def read_lattice_model(latt_dir, verbose=True):
 
         if os.path.isfile(file_name):
             if verbose:
-                print(f"Reading {file_name}")
+                #print(f"Reading {file_name}")
+                print("Reading {}".format(file_name))
 
             alldata[name] = read_func(file_name)
         else:
-            print(f'{file_name} not present')
+            #print(f'{file_name} not present')
+            print('{} not present'.format(file_name))
 
 
     # Perform consistency checks between data from different VASP files
@@ -179,7 +182,8 @@ def write_modeldef(filename, pars):
 
         for _ in range(nn_pars):
             sarr = re.findall('\S+', f.readline())
-            fo.write(f'{sarr[0]} {sarr[1]} {pars[i]}\n')
+            #fo.write(f'{sarr[0]} {sarr[1]} {pars[i]}\n')
+            fo.write('{} {} {}\n'.format(sarr[0], sarr[1], pars[i]))
             i += 1
 
         line = f.readline()
@@ -188,13 +192,15 @@ def write_modeldef(filename, pars):
 
         for _ in range(nnn_pars):
             sarr = re.findall('\S+', f.readline())
-            fo.write(f'{sarr[0]} {sarr[1]} {pars[i]}\n')
+            #fo.write(f'{sarr[0]} {sarr[1]} {pars[i]}\n')
+            fo.write('{} {} {}\n'.format(sarr[0], sarr[1], pars[i]))
             i += 1
 
         for line in iter(f.readline, ''):
             fo.write(line)
 
-    assert i == len(pars), f"The number of old ({i}) and new ({len(pars)}) do not match."
+    #assert i == len(pars), f"The number of old ({i}) and new ({len(pars)}) do not match."
+    assert i == len(pars), "The number of old ({}) and new ({}) do not match.".format(i, len(pars))
 
     os.rename(filename, filename+'_old')
     os.rename(filename+'_temp', filename)
