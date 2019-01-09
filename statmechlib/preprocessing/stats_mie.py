@@ -62,7 +62,8 @@ def get_stats_Mie(xyz, box, atom_type=None, ms=[12,6], rcut=None):
 
     # particle type mesh grids
     mti, mtj = np.meshgrid(atom_type1, atom_type2, indexing='ij')
-    assert mti.shape == rr.shape, f"stats_mie: Shapes of mti {mti.shape} and rr {rr.shape} are incompatible"
+    #assert mti.shape == rr.shape, f"stats_mie: Shapes of mti {mti.shape} and rr {rr.shape} are incompatible"
+    assert mti.shape == rr.shape, "stats_mie: Shapes of mti {} and rr {} are incompatible".format(mti.shape, rr.shape)
 
     # ENERGY cacluations
 
@@ -73,7 +74,8 @@ def get_stats_Mie(xyz, box, atom_type=None, ms=[12,6], rcut=None):
 
     # meshgrid to eliminate duplicate pair interactins
     ii, jj = np.meshgrid(range(rr.shape[0]), range(rr.shape[1]), indexing='ij')
-    assert ii.shape == rr.shape, f"stats_mie: Shapes of ii {ii.shape} and rr {rr.shape} are incompatible"
+    #assert ii.shape == rr.shape, f"stats_mie: Shapes of ii {ii.shape} and rr {rr.shape} are incompatible"
+    assert ii.shape == rr.shape, "stats_mie: Shapes of ii {} and rr {} are incompatible".format(ii.shape, rr.shape)
 
     # cycle over all combinations of pairs of particle types for energy contributions
     u_stats = defaultdict(list)
@@ -94,7 +96,8 @@ def get_stats_Mie(xyz, box, atom_type=None, ms=[12,6], rcut=None):
     # particle type mesh grids for forces - stack 
     fti = np.stack((mti, mti, mti), axis=-1)
     ftj = np.stack((mtj, mtj, mtj), axis=-1)
-    assert fti.shape == rx.shape, f"The shapes of fti {fti.shape} and rx {rx.shape} are different"
+    #assert fti.shape == rx.shape, f"The shapes of fti {fti.shape} and rx {rx.shape} are different"
+    assert fti.shape == rx.shape, "The shapes of fti {} and rx {} are different".format(fti.shape, rx.shape)
 
     # Create lists of 2D matrices with 1/r^(m+2) values for forces
     rpow_x = [rinv**(m+2) for m in ms]

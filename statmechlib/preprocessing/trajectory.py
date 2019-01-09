@@ -132,7 +132,7 @@ class Trajectory:
 
         # Check that nvt and uvt ensembles have the same box parameters
         if self['ensemble'] == 'nvt' or self['ensemble'] == 'uvt':
-            assert self['box'] == new_traj['box'], f"Append: box parameters do not match"
+            assert self['box'] == new_traj['box'], "Append: box parameters do not match"
 
         # define which items will be appended
         append_keys = ['xyz', 'box', 'atom_type', 'temp', 'forces']

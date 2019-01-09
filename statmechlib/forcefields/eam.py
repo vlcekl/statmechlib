@@ -148,7 +148,8 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
         # electronic density coefficients. The first coefficient is always 1
 
         ndens = len(hparams['edens'])
-        assert 2+npair+ndens-1 == len(params), f"Wrong number of parameters: {len(params)} vs. {2+npair+ndens-1}"
+        #assert 2+npair+ndens-1 == len(params), f"Wrong number of parameters: {len(params)} vs. {2+npair+ndens-1}"
+        assert 2+npair+ndens-1 == len(params), "Wrong number of parameters: {} vs. {}".format(len(params), 2+npair+ndens-1)
         #print('ndens', ndens, hparams['edens'])
         if ndens > 1:
             hd = np.concatenate((params[2+npair:2+npair+ndens-1], [1.0]))
@@ -176,7 +177,8 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
         #print('types', type(rho_func), type(ustats[i][3][0]), ustats[i][3][0].shape)
         #print('ustats', type(ustats[i][3]), ustats[i][3].shape)
         #print('rhofunc', rho_func)
-        assert rho_func.shape[0] == ustats[i][3][0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2][0].shape[0]}"
+        #assert rho_func.shape[0] == ustats[i][3][0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2][0].shape[0]}"
+        assert rho_func.shape[0] == ustats[i][3][0].shape[0], "rho_func shape {} does not match number of atoms == ustats shape {}".format(rho_func_shape[0], ustats[i][2][0].shape[0])
 
         # sum sqrt and squared atom contributions to embedding function
         embed_r.append(np.sum(np.sqrt(rho_func)))
@@ -188,7 +190,8 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
     u_many = np.array([params[0]*embed_r[i] + params[1]*embed_2[i] for i in range(n_sample)])
 
 
-    assert u_pair.shape == u_many.shape, f"Shapes of u_pair ({u_pair.shape}) and u_many ({u_many.shape}) do not match."
+    #assert u_pair.shape == u_many.shape, f"Shapes of u_pair ({u_pair.shape}) and u_many ({u_many.shape}) do not match."
+    assert u_pair.shape == u_many.shape, "Shapes of u_pair ({}) and u_many ({}) do not match.".format(u_pair.shape, u_many.shape)
 
     u_total = 0.5*u_pair + u_many
     #print(u_pair, u_many, u_total)
