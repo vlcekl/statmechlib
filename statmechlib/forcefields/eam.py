@@ -132,30 +132,29 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
 
     n_sample = len(ustats)
 
-    #print('hparams', hparams)
-    #print('params', params)
-
     # assign parameters to different functions
-    if not hparams: # no hparams given
-        # pair interaction coefficients
-        hp = params[2:]
-        # electronic density coefficients. Default single coefficient with value 1
-        hd = [1.0]
+    if not hparams:     # no hparams given
+        hp = params[2:] # pair interaction coefficients
+        hd = [1.0]      # electronic density coefficients. Default single coefficient with value 1
     else:
         # pair interaction coefficients
-        npair = len(hparams['pair'])
+        npair = len(hparams['pair']) 
         hp = params[2:2+npair]
-        # electronic density coefficients. The first coefficient is always 1
 
+        # electronic density coefficients. The first coefficient is always 1
         ndens = len(hparams['edens'])
-        #assert 2+npair+ndens-1 == len(params), f"Wrong number of parameters: {len(params)} vs. {2+npair+ndens-1}"
-        assert 2+npair+ndens-1 == len(params), "Wrong number of parameters: {} vs. {}".format(len(params), 2+npair+ndens-1)
-        #print('ndens', ndens, hparams['edens'])
-        if ndens > 1:
-            hd = np.concatenate((params[2+npair:2+npair+ndens-1], [1.0]))
-            #print('hda', hd, hparams['edens'], type(params))
-        else:
+        if ndens < 1:
             hd = [1.0]
+        else:
+            if len(params[2+npair:]) == ndens:
+                hd = params[2+npair:]
+            else:
+                #assert 2+npair+ndens-1 == len(params), f"Wrong number of parameters: {len(params)} vs. {2+npair+ndens-1}"
+                assert 2+npair+ndens-1 == len(params), "Wrong number of parameters: {} vs. {}".format(len(params), 2+npair+ndens-1)
+                hd = np.concatenate((params[2+npair:2+npair+ndens-1], [1.0]))
+
+        #print('ndens', npair, ndens, hparams['pair'], hparams['edens'])
+        #print('params_len', len(params))
         #print('hdtest', params[2+npair:2+npair+ndens-1], hparams['edens'])
     #print('n', npair, ndens, len(params))
     #print('hp', hp)
@@ -323,6 +322,9 @@ def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose
         n_sample = len(u_targ)
         w = targ.get('weight', 1.0)
 
+        if w == 0.0:
+            continue
+
         # energy diference array for a given target trajectory
         #print('all hparams:', key, hparams)
         uuu = beta*(utot_func(params, u_stat, hparams) - u_targ) # array(n_sample)
@@ -341,6 +343,7 @@ def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose
             # energy-based free energy difference and statistical distance
             ge = -np.log(np.mean(eee))   # free energy difference (shifted)
             cb = np.mean(np.exp(-0.5*(uuu - ge))) # Bhattacharyya coefficient
+            print('cb', key, cb)
             sd2 += w*np.arccos(cb)**2              # statistical distance
 
         else:
@@ -401,15 +404,19 @@ def udif_print(params, targets, stats, utot_func):
     
     hparams = stats['hyperparams']
 
-    opti_out = []
-    targ_out = []
-    # cycle over target system trajectories and statistics to determine SD
-    for targ, stat in zip(targets, stats):
+    opti_out = {}
+    targ_out = {}
 
-        u_targ = np.array(targ['energy']) # target energies
+    # cycle over target system trajectories and statistics to determine SD
+    for key in targets.keys():
+
+        targ = targets[key]
+        stat = stats[key]
+
+        u_targ = targ['energy'] # target energies
         u_stat = stat['energy'] # energy statistics
 
-        opti_out.append(list(utot_func(params, u_stat, hparams)))
-        targ_out.append(list(u_targ))
+        opti_out[key] = list(utot_func(params, u_stat, hparams))
+        targ_out[key] = list(u_targ)
     
     return opti_out, targ_out
