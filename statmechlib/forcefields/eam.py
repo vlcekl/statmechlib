@@ -322,6 +322,8 @@ def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose
         n_sample = len(u_targ)
         w = targ.get('weight', 1.0)
 
+        #print('len', len(u_targ), len(u_stat))
+
         if w == 0.0:
             continue
 
@@ -343,7 +345,7 @@ def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose
             # energy-based free energy difference and statistical distance
             ge = -np.log(np.mean(eee))   # free energy difference (shifted)
             cb = np.mean(np.exp(-0.5*(uuu - ge))) # Bhattacharyya coefficient
-            print('cb', key, cb)
+            #print('cb', key, cb)
             sd2 += w*np.arccos(cb)**2              # statistical distance
 
         else:
