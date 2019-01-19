@@ -136,6 +136,7 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
     if not hparams:     # no hparams given
         hp = params[2:] # pair interaction coefficients
         hd = [1.0]      # electronic density coefficients. Default single coefficient with value 1
+        hc = [0.0]
     else:
         # pair interaction coefficients
         npair = len(hparams['pair']) 
@@ -147,18 +148,13 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
             hd = [1.0]
         else:
             if len(params[2+npair:]) == ndens:
-                hd = params[2+npair:]
+                hd = params[2+npair:2+npair+ndens]
             else:
                 #assert 2+npair+ndens-1 == len(params), f"Wrong number of parameters: {len(params)} vs. {2+npair+ndens-1}"
                 assert 2+npair+ndens-1 == len(params), "Wrong number of parameters: {} vs. {}".format(len(params), 2+npair+ndens-1)
                 hd = np.concatenate((params[2+npair:2+npair+ndens-1], [1.0]))
 
-        #print('ndens', npair, ndens, hparams['pair'], hparams['edens'])
-        #print('params_len', len(params))
-        #print('hdtest', params[2+npair:2+npair+ndens-1], hparams['edens'])
-    #print('n', npair, ndens, len(params))
-    #print('hp', hp)
-    #print('hd', hd)
+        hc = params[-1:]
 
     # pair interactions (per box) from array of spline coefficeints and corresponding statistic
     # sum over spline components, make array over samples
@@ -172,10 +168,7 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
         # coefficient for the last spline section is 1 by definition
         # rho_func.shape should be (n_atom, )
         rho_func = sum([p*s for p, s in zip(hd, ustats[i][3][:])]) 
-        #print('ppp', hd)
-        #print('types', type(rho_func), type(ustats[i][3][0]), ustats[i][3][0].shape)
-        #print('ustats', type(ustats[i][3]), ustats[i][3].shape)
-        #print('rhofunc', rho_func)
+
         #assert rho_func.shape[0] == ustats[i][3][0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2][0].shape[0]}"
         assert rho_func.shape[0] == ustats[i][3][0].shape[0], "rho_func shape {} does not match number of atoms == ustats shape {}".format(rho_func_shape[0], ustats[i][2][0].shape[0])
 
@@ -193,9 +186,12 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
     assert u_pair.shape == u_many.shape, "Shapes of u_pair ({}) and u_many ({}) do not match.".format(u_pair.shape, u_many.shape)
 
     u_total = 0.5*u_pair + u_many
-    #print(u_pair, u_many, u_total)
+
+    # apply long range correction: correction * number of particles * concentration * density (stored in ustats[4]) 
+    u_total += np.array(sum([hc*ustats[i][4]]) for i in range(n_sample)])
 
     return u_total
+
 
 def utot_EAM_per_box(params, ustats, hparams=[-1]):
     """

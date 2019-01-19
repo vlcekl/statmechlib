@@ -92,7 +92,11 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None):
         a1[ks] = np.sum(ax[ks,:])
         a2[ks] = np.sum(ax[ks,:]**2)
 
-    return a1, ar, a2, ax, b1, br, b2
+    # energy correction component (number of particles * density)
+    corr = float(n_atom*n_atom)/np.linalg.det(box)
+    c1 = np.array([corr])
+
+    return a1, ar, a2, ax, b1, br, b2, c1
 
 def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None):
     """

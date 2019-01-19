@@ -134,7 +134,7 @@ class Trajectory(object):
 
         # define which items will be appended
         append_keys = ['xyz', 'box', 'atom_type', 'temp', 'forces']
-        append_keys.extend(['energy', 'free_energy', 'total_energy'])
+        append_keys.extend(['energy'])#, 'free_energy', 'total_energy'])
 
         for key in append_keys:
             self[key] += new_traj[key]
