@@ -14,7 +14,7 @@ eos_params = {
     'W':{'l':0.274, 'r_wse':1.584, 'eta':5.69, 'dE':8.9}
 }
 
-def universal_eos(x, system):
+def universal_eos(x, system='W'):
     """
     Universal equation of state for a given system.
 
@@ -23,7 +23,7 @@ def universal_eos(x, system):
     x: float
        lattice expansion/compression parameter
     system: str
-       system (element) id
+       system (element) id (default 'W')
 
     Returns
     -------
@@ -145,15 +145,47 @@ def insert_zero_params(params_dict, stats):
 
     return params_out
 
-def to_param_dict(params_list, n_params):
+def to_param_dict(params_list, hp):
     """
     Convert from params list to parameter dictionary suitable for saving to a pickle
+
+    Parameters
+    ----------
+    params_list: list of floats
+                List of parameters used as input and output for optimization.
+    hp: list or dict
+        If list, gives number of parameters of each kind (embed, pair, edens, lrcorr)
+        If dict, assumes dictionary of hyperparameters and infers corresponding numbers of parameters
+
+    Returns
+    -------
+    params_dict: dict
+               Dictionary of parameters (+hyperparameters if available)
     """
-    
+
     params_dict = {}
-    params_dict['embed'] = params_list[0:2]
-    params_dict['pair'] = params_list[2:sum(n_params[0:2])]
-    params_dict['edens'] = params_list[sum(n_params[0:2]):sum(n_params)]    
+
+    if isinstance(hp, dict):
+        params_dict.update({'hyperparams':hp})
+
+        hp = [2] + [len(hp[k]) for k in ['pair','edens']]
+
+        # check if there are parameters for long range corrections
+        nlr = len(params_list) - sum(hp)
+        if nlr < 0 or nlr > 1:
+            raise ValueError("Number of parameters does not match number of spline knots.")
+
+        hp += [nlr]
+
+    assert sum(hp) == len(params_list), 'Number of parameters does not match'
+
+    p_dict = {}
+    p_dict['embed']  = params_list[0:hp[0]]
+    p_dict['pair']   = params_list[hp[0]:sum(hp[0:2])]
+    p_dict['edens']  = params_list[sum(hp[0:2]):sum(hp[0:3])]
+    p_dict['lrcorr'] = params_list[sum(hp[0:3]):sum(hp)]    
+
+    params_dict.update({'params':p_dict})
     
     return params_dict
 

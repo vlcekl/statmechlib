@@ -17,8 +17,9 @@ import numpy as np
 from .potentials import f_spline3
 
 # Functional form for the embedding potential and its scaled form
-f_embed = lambda d, a: a[0]*d**0.5 + a[1]*d + a[2]*d**2
-f_embed_s = lambda d, a: f_embed(d/S, a) - C*d/S 
+f_embed = lambda d, a: a[0]*d**0.5 + a[1]*d**2
+f_embed_lin = lambda d, a: a[0]*d**0.5 + a[1]*d + a[2]*d**2
+f_embed_s = lambda d, a: f_embed_lin(d/S, a) - C*d/S 
 
 # Density function and its scaled form
 f_dens = lambda x, dens_a, dens_r: f_spline3(x, dens_a, dens_r)
@@ -136,7 +137,7 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
     if not hparams:     # no hparams given
         hp = params[2:] # pair interaction coefficients
         hd = [1.0]      # electronic density coefficients. Default single coefficient with value 1
-        hc = [0.0]
+        #hc = [0.0]
     else:
         # pair interaction coefficients
         npair = len(hparams['pair']) 
@@ -147,6 +148,7 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
         if ndens < 1:
             hd = [1.0]
         else:
+            #if len(params[2+npair:-1]) == ndens:
             if len(params[2+npair:]) == ndens:
                 hd = params[2+npair:2+npair+ndens]
             else:
@@ -154,7 +156,11 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
                 assert 2+npair+ndens-1 == len(params), "Wrong number of parameters: {} vs. {}".format(len(params), 2+npair+ndens-1)
                 hd = np.concatenate((params[2+npair:2+npair+ndens-1], [1.0]))
 
-        hc = params[-1:]
+        #hc = params[-1:]
+    #!!! not general !!! limit last edens parameter to positive values to preserve positive discriminant
+    if hd[-1] < 0.0:
+        hd[-1] = 0.0
+        params[2+npair:2+npair+ndens] = 0.0
 
     # pair interactions (per box) from array of spline coefficeints and corresponding statistic
     # sum over spline components, make array over samples
@@ -168,6 +174,8 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
         # coefficient for the last spline section is 1 by definition
         # rho_func.shape should be (n_atom, )
         rho_func = sum([p*s for p, s in zip(hd, ustats[i][3][:])]) 
+
+        #print('rho_func:\n', sum(rho_func)/len(rho_func))
 
         #assert rho_func.shape[0] == ustats[i][3][0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2][0].shape[0]}"
         assert rho_func.shape[0] == ustats[i][3][0].shape[0], "rho_func shape {} does not match number of atoms == ustats shape {}".format(rho_func_shape[0], ustats[i][2][0].shape[0])
@@ -188,7 +196,7 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
     u_total = 0.5*u_pair + u_many
 
     # apply long range correction: correction * number of particles * concentration * density (stored in ustats[4]) 
-    u_total += np.array(sum([hc*ustats[i][4]]) for i in range(n_sample)])
+    #u_total += np.array([sum([a*s for a, s in zip(hc, ustats[i][4][:])]) for i in range(n_sample)])
 
     return u_total
 

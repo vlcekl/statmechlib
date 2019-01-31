@@ -196,6 +196,7 @@ def scale_configuration(trj, scale):
     trj['free_energy'][0] = universal_eos(scale)*len(trj['xyz'][0])
     trj['total_energy'][0] = universal_eos(scale)*len(trj['xyz'][0])
     trj['forces'][0] = np.zeros_like(trj['forces'][0])
+
     return trj
 
 
