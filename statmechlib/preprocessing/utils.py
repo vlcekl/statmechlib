@@ -95,6 +95,20 @@ def map_histograms(hist, mapfunc):
 
     return new_hist
 
+def downselect(stats_inp, pair_knots, edens_knots):
+
+    # find idices of knots
+    pair_index = find_index(pair_knots, stats_inp['hyperparams']['pair'])
+    edens_index = find_index(edens_knots, stats_inp['hyperparams']['edens'])
+
+    # create boolean arrays with select indices set to True
+    p_ix = np.array([True if i in pair_index else False for i in range(len(stats_inp['hyperparams']['pair']))])
+    m_ix = np.array([True if i in edens_index else False for i in range(len(stats_inp['hyperparams']['edens']))])
+
+    stats_out = select_nodes(stats_inp, p_ix, m_ix)
+
+    return stats_out
+
 
 def select_nodes(stats_input, p_index, m_index):
     """
