@@ -240,3 +240,59 @@ def find_index(select_list, full_list):
     assert len(knots) == len(select_list), "Knots and select_list lengths do not match"
     
     return knots
+
+def find_min_distance(trajectories):
+    k_min = ''
+    r_min = 100.0
+    r220 = 0
+    r225 = 0
+    for key, trj in trajectories.items():
+        for xyz, box in zip(trj['xyz'], trj['box']):
+            rr = pair_dist(xyz, box)[0]
+            rr = np.where(rr > 0.0001, rr, 100.0)
+            r = np.min(rr)
+            if r < 2.25:
+                r225 += 1
+                if r < 2.2:
+                    r220 +=1
+            if r < r_min:
+                r_min = r
+                k_min = key
+                print(k_min, r_min, r225, r220)
+
+                
+    return r_min, r225, r220
+
+
+def get_pair_dist(trajs, fname='pair_distribution'):
+    if not isinstance(trajs, list):
+        trajs = [trajs]
+        
+    plt.figure(figsize=(20,10))
+    for i, traj in enumerate(trajs):
+        # calculate pair distances
+        hist = np.zeros((382), dtype=float)
+        for box, cfg in zip(traj['box'], traj['xyz']):
+            rr, rx = pair_dist_cutoff(cfg, box, 6.82)
+            hst, bin_edges = np.histogram(rr, bins=382, range=(2.0, 6.82))
+            hist += hst
+        hist /= len(traj['box'])*len(traj['xyz'][0])
+        plt.plot(bin_edges[:-1], hist*10, label=str(i))
+
+        print(len(bin_edges), len(hist))
+    
+        cumm = [sum(hist[0:k]) for k in range(len(hist))]
+        plt.plot(bin_edges[:-1], cumm, label=str(i))
+        
+        plt.vlines([4.62, 4.9, 5.18, 5.38, 5.58, 5.62], 0, 100, colors='m')
+        plt.vlines([2.22, 2.46, 2.5648975, 2.629795, 2.6946925,
+                    2.8663175, 2.973045, 3.0797725, 3.5164725,
+                    3.846445, 4.1764175, 4.700845, 4.8953,
+                    5.089755, 5.3429525, 5.401695, 5.4604375], 0, 100, colors='k')
+
+    #plt.hist(rr[0], 50)
+    plt.xlim(2.2, 6.66)
+    #plt.ylim(0, 30)
+    plt.legend()
+    plt.savefig(os.path.join(reports, fname+'.png'))
+

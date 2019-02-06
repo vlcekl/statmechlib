@@ -6,4 +6,4 @@ from .stats import force_targ, scale_configuration
 from .trajectory import Trajectory
 from .utils import universal_eos, normalize_histogram, map_histograms, find_index
 from .utils import select_nodes, insert_zero_params, to_param_dict, to_param_list, rescale_manybody_params
-from .utils import downselect
+from .utils import downselect, find_min_distance
