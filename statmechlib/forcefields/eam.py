@@ -222,16 +222,19 @@ def utot_EAM_per_box(params, ustats, hparams=[-1]):
 
     n_sample = len(ustats)
 
-    if not hparams:
-        hp = -1
-    else:
-        hp = hparams[0]
+    # pair interaction coefficients
+    npair = len(hparams['pair']) 
+    hp = params[2:2+npair]
+
+    # electronic density coefficients. The first coefficient is always 1
+    assert len(hparams['edens']) == 1, 'number of edens knots not equal to 1: {0}'.format(len(hparams['edens'])) 
+    assert len(params) == 2 + len(hp), 'number of params does not sum to 2+pair params: {0}'.format(len(params))
 
     # pair interactions from array of spline coefficeints and corresponding statistic
-    u_pair = np.array([sum([a*s for a, s in zip(params[2:], ustats[i][2][:])]) for i in range(n_sample)])
+    u_pair = np.array([sum([a*s for a, s in zip(hp, ustats[i][2][:])]) for i in range(n_sample)])
 
     # manybody interactions from embedding function parameters and corresponding statistics
-    u_many = np.array([params[0]*ustats[i][0][hp] + params[1]*ustats[i][1][hp] for i in range(n_sample)])
+    u_many = np.array([params[0]*ustats[i][0][0] + params[1]*ustats[i][1][0] for i in range(n_sample)])
 
     u_total = 0.5*u_pair + u_many
     #print(u_pair, u_many, u_total)

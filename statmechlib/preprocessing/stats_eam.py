@@ -249,3 +249,66 @@ def get_stats_EAM_limited(rr, rx, sc):
     f_stats = [b1, br, b2]
 
     return u_stats, f_stats
+
+
+def tpf_to_bsplines(stats_tpf, knots_id):
+    """
+    Convert statistics data from the cubic truncated power function (TPF) basis to b-splines.
+    Only works for the special case of evenly separated knots. 
+
+    Parameters
+    ----------
+    stats_tpf: dict
+               Trajectory statistics information using TPF basis
+    bknots: list of ints
+            Indices of knots from the stats_tpf
+               
+    Returns
+    -------
+    stats_bspline: dict
+               Trajectory statistics information using b-spline basis
+
+    """
+
+    knots_tpf = stats['hyperparams']
+
+    # get knot vector
+    knots_b = [round(knots_tpf[i], 6) for i in knots_id]
+
+    # check if the selected knots are evenly spaced
+    diff = [knots_b[i+1] - knots_b[i] for i in range(len(knots_b)-1)]
+    assert sum([abs(d - diff[0]) for d in diff]) < 1e-6, 'Knots are not evenly spaced'
+
+    stats_bspline = {}
+    stats_bspline['hyperparams'] = knots_b
+
+    # binomial coefficients for cubic splines
+    binom = [1.0, -4.0, 6.0, -4.0, 1.0]
+
+    stats_old = stats_tpf['energy']
+    stats_new = []
+
+    # cycle over configurations of the trajectory
+    for ic, s_old in enumerate(stats_old):
+        s_new = []
+
+        # run through all components
+        for k, so in enumerate(s_old):
+            # create a component ndarray of the right shape
+            sn = np.zeros_like(so)
+
+            # add contributions from tpf
+            for i, knot in enumerate(knots_id):
+                for j, bc in enumerate(binom):
+                    sn += bc*s_old[k][i+j]
+
+            # append new b-spline components
+            s_new.append(sn)
+
+        stats_new.append(s_new)
+
+    stats_bspline['energy'] = stats
+
+    return stats_bspline
+
+
