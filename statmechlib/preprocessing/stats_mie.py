@@ -67,7 +67,6 @@ def get_stats_Mie(xyz, box, atom_type=None, ms=[12,6], rcut=None):
 
     # ENERGY cacluations
 
-
     # Create lists of 2D matrices with 1/r^m values for energy
     rpow_u = [rinv**m for m in ms]
     print('rcut:', rcut, mti.shape, mtj.shape, rpow_u[0].shape)

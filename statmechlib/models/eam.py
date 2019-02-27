@@ -7,11 +7,95 @@ except:
     xrange = range
     # We have Python 3
 
+"""
+EAM models
+"""
+
+class EAM(object):
+    """
+    Class defining EAM type force fields.
+    In general, it will have pair and manybody interaction components.
+    The most common description of the pair and density interactions is using
+    splines. The optimization allows for setting regularization parameters in
+    the form of coefficent difference penalization.
+
+    Attributes
+    -----------
+    pair: dict
+           pair potential parameters. If a spline type, knots and
+           coefficients will be expected. Others may include Mie
+           potentials.
+    manybody: dict
+           manybody interactions. Typically envolves a spline-based density function 
+           (knots, coefficients) and embedding function parameters.
+           Potentiall can include additional terms, such as angular
+           functions with their parameters.
+    alpha: float
+           regularization strength, non-negative value (default 0.0). It
+           will be used for those potential components that do not define
+           their specific penalties and strengths.
+    """
+
+    def __init__(self, pair, manybody, alpha=0.0):
+        """
+        Sets up a particular form of the model.
+        """
+        self.pair = pair
+        self.manybody = manybody
+        self.alpha = alpha
 
 
-"""
-Collection of EAM functions
-"""
+    def fit(self, X, y, coef_init=None, method='Nelder-Mead'):
+        """
+        Fits model using a given method. New parameters will be stored in
+        appropriate dicts.
+
+        """
+
+    def predict(self, properties, method='reweight', sim_type=None):
+        """
+        Predicts values of selected properties.
+
+        Parameters
+        ----------
+        method: str
+               Prediction method. Default is reweighting, which is fast but
+               may be inacurate. Alternatively, 'sim' can be used to specify
+               simulations to be used for predictions. 
+        sim_type: str
+               Specifies what type of simulations will be used (e.g.
+               'md-lammps', so that appropriate input files can be generated)
+        """
+
+
+        return predictions
+
+
+    def get_params(self):
+        """
+        Get parameters of the current model.
+        
+        Returns
+        -------
+        out: dict
+              Dictionary of all current paramters
+
+        """
+
+        out = dict()
+
+        return out
+
+
+    def set_params(self, **params):
+        """
+        Set the model parameters.
+        Creates new ones, keeps old ones unless they are overriden.
+        Keeps old ones, unless they are overridden.
+        """
+
+        for key, value in params.items():
+
 
 import numpy as np
 from .potentials import f_spline3
@@ -242,6 +326,48 @@ def utot_EAM_per_box(params, ustats, hparams=[-1]):
     return u_total
 
 
+def ftot_EAM(params, fstats):
+    """
+    Calculates configurational energy from EAM sufficient statistics and model parameters
+
+    Parameters
+    ----------
+    params : list of lists and floats
+             EAM interaction parameters (spline coefficients array and embedding function parameters)
+    fstats : list of lists and floats
+             Sufficient statistics
+
+    Returns
+    -------
+    f_total: float
+             total configurational energy (sum of pair and manybody interactions)
+    """
+
+    # number of samples and atoms
+    n_sample = len(fstats)
+    
+    
+    # cycle over samples
+    f_total = []
+    for i in range(n_sample):
+
+        # pair interactions from array of spline coefficeints and corresponding statistic
+        f_pair = sum([p*s for p, s in zip(params[2:], fstats[i][2][:])]) 
+
+        # manybody interactions from embedding function parameters and corresponding statistics
+        f_many = params[0]*fstats[i][0][-1] + params[1]*fstats[i][1][-1]
+        
+        n_atom = fstats[i][0][0].shape[0]
+        # Create a 6N + 1 array of 0, f, and -f
+        fx = np.zeros((6*n_atom + 1), dtype=float)
+        fx[1:3*n_atom+1] = 0.5*f_pair.flatten() + f_many.flatten()
+        fx[3*n_atom+1:] = -fx[1:3*n_atom+1]
+        #print('natom', n_atom, type(f_pair), type(f_many), f_pair.shape, f_many.shape)
+ 
+        f_total.append(fx)
+        
+    return np.array(f_total)
+
 
 def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose=0):
     """
@@ -293,32 +419,59 @@ def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose
             continue
 
         # energy diference array for a given target trajectory
+        #print('all hparams:', key, hparams)
         uuu = beta*(utot_func(params, u_stat, hparams) - u_targ) # array(n_sample)
         uuu -= np.mean(uuu)
         eee = np.exp(-uuu)
+        #print('uuu', uuu)
+        #print('utarg', u_targ)
+        #print('ustat', utot_func(params, u_stat))
+        #print('eee', eee)
+        
+        #print('sd2', utot_EAM(params, u_stat)[0], u_targ[0])
 
-        # energy-based free energy difference and statistical distance
-        ge = -np.log(np.mean(eee))   # free energy difference (shifted)
-        cb = np.mean(np.exp(-0.5*(uuu - ge))) # Bhattacharyya coefficient
-        sd2 += w*np.arccos(cb)**2              # statistical distance
+        # are we using forces?
+        if (not ftot_func) or ('forcesx' not in targ):
 
+            # energy-based free energy difference and statistical distance
+            ge = -np.log(np.mean(eee))   # free energy difference (shifted)
+            cb = np.mean(np.exp(-0.5*(uuu - ge))) # Bhattacharyya coefficient
+            #print('cb', key, cb)
+            sd2 += w*np.arccos(cb)**2              # statistical distance
+
+        else:
+
+            betad = beta*dl  # beta * dl
+            f_targ = targ['forces'] # target forces (n_sample, 1+6N) (0, 3Nf, -3Nf)
+            f_stat = stat['forces'] # force statistics (n_sample, npars, 3N)
+            #print('ftarg', f_targ[-1].shape)
+            #print('fstat', f_stat[-1].shape)
+
+            eeh = np.exp(-0.5*uuu)
+            fff = ftot_func(params, f_stat) # n_sample *(6N + 1) force contributions
+            #print('s', fff[-1][:])
+            #print('t', f_targ[-1][:])
+            #print('ee', np.mean(np.exp(betad*fff[-1])), eee[-1]*np.mean(np.exp(betad*fff[-1]))) 
+            #print('eall', eee[:])
+
+            # target and model force terms
+            fpave = np.mean([np.mean(np.exp(betad*f_targ[i])) for i in range(n_sample)])
+            fqave = np.mean([eee[i]*np.mean(np.exp(betad*fff[i])) for i in range(n_sample)])
+            fhave = np.mean([eeh[i]*np.mean(np.exp(0.5*betad*(fff[i]+f_targ[i]))) for i in range(n_sample)])
+            
+            # force-based free energy difference and statistical distance
+            gef = -np.log(fqave/fpave)
+            cb = fhave/(fqave*fpave)**0.5
+            if cb > 1: cb = 1
+            sd2f += w*np.arccos(cb)**2
+
+            #print('fff', fpave, fqave, fhave, gef, cb, betad)
+    
     if verbose > 0:
         print('loss', sd2+sd2f, sd2, sd2f)
         #print('params', params, type(params))
-
-    # add regularization condition
-    # cubic parameter difference
-
-    # pair potential
-    cs = pre_knots['pair'] + params[2:len(hparams['pair'])] + post_knots['pair']
-    reg = sum([ cs[i]+3*cs[i+1]+3*cs[i+2]+cs[i+4]  for i in range(len(cs))])
-
-    # electronic density spline
-    if len(hparams['edens']) > 1:
-        cs = pre_knots['edens'] + params[2:len(hparams['edens'])] + post_knots['edens']
-        reg += sum([ cs[i]+3*cs[i+1]+3*cs[i+2]+cs[i+4]  for i in range(len(cs))])
     
-    return sd2 + reg
+    return sd2 + sd2f
 
 
 def udif_print(params, targets, stats, utot_func):

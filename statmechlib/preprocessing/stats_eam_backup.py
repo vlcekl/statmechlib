@@ -10,7 +10,7 @@ except:
 import numpy as np
 from .pair_dist import pair_dist, pair_dist_cutoff
 
-def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, rmax=None):
+def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None):
     """
     Takes atom pair distances and calculates per atom-statistics needed
     for the parameterization of a cubic spline-based EAM model similar to
@@ -24,13 +24,9 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, r
     atom_type: list of int
             atom type ids
     sc : python list of floats
-         If not rcut and rmax parameters are given, sc expected to be ordered on a regular grid
-         In this format last three knots will be used as helper knots needed for
-         cubic b-spline definition
+         spline knots
     rcut: float
-          EAM potential cutoff distance
-    rmax: float
-          
+          potential cutoff distance
 
     Returns
     -------
@@ -42,13 +38,9 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, r
                  grad(el_density**0.5), grad(el_density), grad(el_density**2)
     """
  
-    # set rcut to the potential cutoff
+    # set rcut to max if None
     if rcut == None:
-        rcut = sc[-4]
-
-    # set rmax to the most distant knot for b-spline definition
-    if rmax == None:
-        rmax = sc[-1]
+        rcut = max(sc)
 
     xyz = config[0]
     box = config[1]
@@ -81,14 +73,14 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, r
         for i in range(n_atom):
 
             # sum electronic density over all neighbors of i within rc
-            aa = sum([(rc - r)**3 for r in rr[i] if (r < rcut and r < rc and r > 0.01)])
+            aa = sum([(rc - r)**3 for r in rr[i] if (r < rc and r > 0.01)])
             ax[ks, i] = aa
 
             # if el. density larger than zero, calculate force statistics
             if aa > 0.0:
 
                 # precompute a list of recurring values for force statistics
-                ff = [1.5*(rc - r)**2*x/r if (r > 0.01 and r < rc and r < rcut) else zero3 for r, x in zip(rr[i], rx[i])]
+                ff = [1.5*(rc - r)**2*x/r if (r > 0.01 and r < rc) else zero3 for r, x in zip(rr[i], rx[i])]
 
                 # sum contributions to force statistics from all neighbors of i
                 b1[ks, i] = sum([2*f       for f in ff])
@@ -106,7 +98,7 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, r
 
     return a1, ar, a2, ax, b1, br, b2, c1
 
-def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None, rmax=None):
+def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None):
     """
     Takes atom pair distances and calculates per box-statistics needed
     for the parameterization of a cubic spline-based EAM model by Bonny et al. (2017),
@@ -134,16 +126,8 @@ def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None, 
     """
  
     # set rcut to max if None
-    #if rcut == None:
-    #    rcut = max(sc)
-
-    # set rcut to the potential cutoff
     if rcut == None:
-        rcut = sc[-4]
-
-    # set rmax to the most distant knot for b-spline definition
-    if rmax == None:
-        rmax = sc[-1]
+        rcut = max(sc)
 
     # get pair distances (absolute and Cartesian components)
     rr, rx = pair_dist_cutoff(xyz, box, rcut)
@@ -173,13 +157,13 @@ def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None, 
         for i in range(n_atom):
 
             # sum electronic density over all neighbors of i within rc
-            aa[i] = sum([(rc - r)**3 for r in rr[i] if (r < rcut and r < rc and r > 0.01)])
+            aa[i] = sum([(rc - r)**3 for r in rr[i] if (r < rc and r > 0.01)])
 
             # if el. density larger than zero, calculate force statistics
             if aa[i] > 0.0:
 
                 # precompute a list of recurring values for force statistics
-                ff = [1.5*(rc - r)**2*x/r if (r < rcut and r > 0.01 and r < rc) else zero3 for r, x in zip(rr[i], rx[i])]
+                ff = [1.5*(rc - r)**2*x/r if (r > 0.01 and r < rc) else zero3 for r, x in zip(rr[i], rx[i])]
 
                 # sum contributions to force statistics from all neighbors of i
                 b1[ks, i] = sum([2*f       for f in ff])
