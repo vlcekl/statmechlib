@@ -7,6 +7,7 @@ except:
     xrange = range
     # We have Python 3
 
+import copy
 import numpy as np
 from .pair_dist import pair_dist, pair_dist_cutoff
 
@@ -74,7 +75,7 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, r
     b2 = np.zeros_like(br)
     zero3 = np.zeros((3), dtype=float)
 
-    # cycle over spline nodes
+    # cycle over spline knots
     for ks, rc in enumerate(sc):
 
         # cycle over atoms
@@ -95,7 +96,8 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, r
                 br[ks, i] = sum([ -f/np.sqrt(aa) for f in ff])
                 b2[ks, i] = sum([4*f*aa for f in ff])
 
-        # sum contributions to per box energy statistics for a given spline node
+        # sum contributions to per box energy statistics for a given spline
+        # knot
         ar[ks] = np.sum(np.sqrt(ax[ks,:]))
         a1[ks] = np.sum(ax[ks,:])
         a2[ks] = np.sum(ax[ks,:]**2)
@@ -121,7 +123,7 @@ def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None, 
     rx : numpy array
          set of pair distance coordinates
     sc : python list of floats
-         spline nodes
+         spline knots
 
     Returns
     -------
@@ -166,7 +168,7 @@ def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None, 
     b2 = np.zeros_like(br)
     zero3 = np.zeros((3), dtype=float)
 
-    # cycle over spline nodes
+    # cycle over spline knots
     for ks, rc in enumerate(sc):
 
         # cycle over atoms
@@ -186,7 +188,7 @@ def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None, 
                 br[ks, i] = sum([ -f/np.sqrt(aa[i]) for f in ff])
                 b2[ks, i] = sum([4*f*aa[i] for f in ff])
 
-        # sum contributions to energy statistics for a given spline node
+        # sum contributions to energy statistics for a given spline knot
         ar[ks] = np.sum(np.sqrt(aa))
         a1[ks] = np.sum(aa)
         a2[ks] = np.sum(aa**2)
@@ -209,7 +211,7 @@ def get_stats_EAM_limited(rr, rx, sc):
     rx : numpy array
          set of pair distance coordinates
     sc : python list of floats
-         spline nodes
+         spline knots
 
     Returns
     -------
@@ -236,7 +238,7 @@ def get_stats_EAM_limited(rr, rx, sc):
     b2 = np.zeros_like(br)
     zero3 = np.zeros((3), dtype=float)
 
-    # cycle over spline nodes
+    # cycle over spline knots
     for ks, rc in enumerate(sc):
 
         # cycle over atoms
@@ -256,7 +258,7 @@ def get_stats_EAM_limited(rr, rx, sc):
                 br[ks, i] = sum([ -f/np.sqrt(aa[i]) for f in ff])
                 b2[ks, i] = sum([4*f*aa[i] for f in ff])
 
-        # sum contributions to energy statistics for a given spline node
+        # sum contributions to energy statistics for a given spline knot
         ar[ks] = np.sum(np.sqrt(aa))
         a1[ks] = np.sum(aa)
         a2[ks] = np.sum(aa**2)
@@ -267,7 +269,7 @@ def get_stats_EAM_limited(rr, rx, sc):
     return u_stats, f_stats
 
 
-def tpf_to_bsplines(stats_tpf, knots_id):
+def tpf_to_bsplines(stats_tpf):
     """
     Convert statistics data from the cubic truncated power function (TPF) basis to b-splines.
     Only works for the special case of evenly separated knots. 
@@ -286,44 +288,58 @@ def tpf_to_bsplines(stats_tpf, knots_id):
 
     """
 
-    knots_tpf = stats['hyperparams']
-
-    # get knot vector
-    knots_b = [round(knots_tpf[i], 6) for i in knots_id]
+    knots_tpf = copy.deepcopy(stats_tpf['hyperparams'])
 
     # check if the selected knots are evenly spaced
-    diff = [knots_b[i+1] - knots_b[i] for i in range(len(knots_b)-1)]
+    diff = [knots_tpf[i+1] - knots_tpf[i] for i in range(len(knots_tpf)-1)]
     assert sum([abs(d - diff[0]) for d in diff]) < 1e-6, 'Knots are not evenly spaced'
 
     stats_bspline = {}
-    stats_bspline['hyperparams'] = knots_b
+    stats_bspline['hyperparams'] = knots_tpf
+    stats_bspline['function'] = stats_tpf['function']
 
     # binomial coefficients for cubic splines
     binom = [1.0, -4.0, 6.0, -4.0, 1.0]
 
     stats_old = stats_tpf['energy']
+
     stats_new = []
 
-    # cycle over configurations of the trajectory
-    for ic, s_old in enumerate(stats_old):
-        s_new = []
+    for key, traj in stats_tpf.items():
+        if 'hyperparams' in key or 'function' in key:
+            continue
 
-        # run through all components
-        for k, so in enumerate(s_old):
-            # create a component ndarray of the right shape
-            sn = np.zeros_like(so)
+        traj_new = []
 
-            # add contributions from tpf
-            for i, knot in enumerate(knots_id):
-                for j, bc in enumerate(binom):
-                    sn += bc*s_old[k][i+j]
+        # cycle over configurations of the trajectory
+        for conf in traj:
+            conf_new = []
+ 
+            # run through the different statistics for the configuration
+            for stat in conf:
 
-            # append new b-spline components
-            s_new.append(sn)
+                # create a component ndarray of the right shape (
+                if isinstance(stat, float):
+                    stat_new = 0.0
+                elif isinstance(stat, np.ndarray):
+                    stat_new = np.zeros_like(stat)
+                else:
+                    raise "Unknown type of stat_new"
 
-        stats_new.append(s_new)
+                # add contributions from tpf
+                for i in range(len(knots_tpf)-5):
+                    for j, bc in enumerate(binom):
+                        assert i+j <= len(knot_tpf), "B-spline components exceed TPF knots"
+                        stat_new += bc*stat[i+j]
+ 
+                # append new b-spline statistics
+                conf_new.append(stat_new)
+ 
+            traj_new.append(conf_new)
 
-    stats_bspline['energy'] = stats
+        stats_new[key] = traj_new
+
+    stats_bspline['energy'] = stats_new
 
     return stats_bspline
 
