@@ -1,5 +1,6 @@
-from .pair_dist import pair_dist, pair_dist_cutoff
+from .pair_dist import pair_dist, pair_dist_cutoff, cfg_replicate
 from .stats_eam import get_stats_EAM_per_atom, get_stats_EAM_per_box, get_stats_EAM_limited
+from .stats_eam import tpf_to_bsplines
 from .stats_mie import get_stats_Mie
 from .stats_lattice import get_stats_latt
 from .stats import force_targ, scale_configuration

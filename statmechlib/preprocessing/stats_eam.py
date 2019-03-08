@@ -278,9 +278,9 @@ def tpf_to_bsplines(stats_tpf):
     ----------
     stats_tpf: dict
                Trajectory statistics information using TPF basis
-    bknots: list of ints
-            Indices of knots from the stats_tpf
-               
+               Should be based on evenly spaced knots with the last three
+               being the boundary knots
+
     Returns
     -------
     stats_bspline: dict
@@ -288,58 +288,72 @@ def tpf_to_bsplines(stats_tpf):
 
     """
 
-    knots_tpf = copy.deepcopy(stats_tpf['hyperparams'])
+    knots_tpf = copy.deepcopy(stats_tpf['hyperparams'])['pair']
 
     # check if the selected knots are evenly spaced
+    print('len',len(knots_tpf))
     diff = [knots_tpf[i+1] - knots_tpf[i] for i in range(len(knots_tpf)-1)]
     assert sum([abs(d - diff[0]) for d in diff]) < 1e-6, 'Knots are not evenly spaced'
-
-    stats_bspline = {}
-    stats_bspline['hyperparams'] = knots_tpf
-    stats_bspline['function'] = stats_tpf['function']
 
     # binomial coefficients for cubic splines
     binom = [1.0, -4.0, 6.0, -4.0, 1.0]
 
-    stats_old = stats_tpf['energy']
+    stats_bspline = {}
+    stats_bspline['hyperparams'] = copy.deepcopy(stats_tpf['hyperparams'])
+    stats_bspline['hyperparams']['edens'] = stats_bspline['hyperparams']['edens'][:-4]
+    stats_bspline['hyperparams']['pair'] = stats_bspline['hyperparams']['pair'][:-4]
 
-    stats_new = []
+    stats_bspline['function'] = stats_tpf['function']
 
     for key, traj in stats_tpf.items():
+
+        # skip non-trajectory items
         if 'hyperparams' in key or 'function' in key:
             continue
 
+        # create a new trajectory
         traj_new = []
 
         # cycle over configurations of the trajectory
-        for conf in traj:
+        for conf in traj['energy']:
+
+            # create a new configuration
             conf_new = []
  
-            # run through the different statistics for the configuration
-            for stat in conf:
+            # run through the different energy statistics for the configuration
+            # 0:sum(rho^0.5), 1:sum(rho^2), 2:pair, 3:rho-per-atom)
+            for ir, stat in enumerate(conf[0:4]):
 
-                # create a component ndarray of the right shape (
-                if isinstance(stat, float):
-                    stat_new = 0.0
-                elif isinstance(stat, np.ndarray):
-                    stat_new = np.zeros_like(stat)
-                else:
-                    raise "Unknown type of stat_new"
+                # create a new statistics
+                stat_new = []
 
-                # add contributions from tpf
-                for i in range(len(knots_tpf)-5):
-                    for j, bc in enumerate(binom):
-                        assert i+j <= len(knot_tpf), "B-spline components exceed TPF knots"
-                        stat_new += bc*stat[i+j]
+                # add contributions from tpf 
+                for i in range(len(knots_tpf)-4):
+
+                    if ir < 2:
+                        # this is for stats 0 and 1 (no b-splines)
+                        bs = copy.deepcopy(stat[i])
+                    else:
+                        # this is for stats 2 and 3: convert tpf to b-splines
+                        if isinstance(stat[i], float):
+                            bs = 0.0
+                        elif isinstance(stat, np.ndarray):
+                            bs = np.zeros_like(stat[i])
+                        else:
+                            raise TypeError('stat is neither float or ndarray'+str(type(stat))+stat)
+                        
+                        for j, bc in enumerate(binom):
+                            assert i+j <= len(knots_tpf), "B-spline components exceed TPF knots"
+                            bs += bc*stat[i+j]
+
+                    stat_new.append(bs)
  
                 # append new b-spline statistics
-                conf_new.append(stat_new)
+                conf_new.append(np.array(stat_new))
  
             traj_new.append(conf_new)
 
-        stats_new[key] = traj_new
-
-    stats_bspline['energy'] = stats_new
+        stats_bspline[key] = {'energy':traj_new}
 
     return stats_bspline
 

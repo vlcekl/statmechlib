@@ -105,10 +105,12 @@ def downselect(stats_inp, pair_knots, edens_knots):
     p_ix = np.array([True if i in pair_index else False for i in range(len(stats_inp['hyperparams']['pair']))])
     m_ix = np.array([True if i in edens_index else False for i in range(len(stats_inp['hyperparams']['edens']))])
 
-    stats_out = select_nodes(stats_inp, p_ix, m_ix)
+    if len(edens_knots) > 1:
+        stats_out = select_nodes(stats_inp, p_ix, m_ix)
+    elif len(edens_knots) == 1:
+        stats_out = select_knots_perbox(stats_inp, p_ix, m_ix)
 
     return stats_out
-
 
 def select_nodes(stats_input, p_index, m_index):
     """
@@ -134,6 +136,34 @@ def select_nodes(stats_input, p_index, m_index):
                 #new_conf[2] = conf[2][index]
                 new_conf =  [c[p_index] for c in conf[0:3]]
                 new_conf.append(conf[3][m_index])
+                stats['energy'][i] = new_conf
+                
+    stats_select['hyperparams']['pair'] = list(np.array(stats_select['hyperparams']['pair'])[p_index])
+    stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'])[m_index])
+
+    return stats_select
+
+
+def select_knots_perbox(stats_input, p_index, m_index):
+    """
+    Select only configuration statistics from stats (spline nodes) that are given in index.
+    Parameters
+    ----------
+    stats_input: dict
+               statistics for all nodes
+    p_index: list
+             list of spline knots used for pair interactions
+    m_index: list
+             list of spline knots used for density function in manybody interactions
+    """
+    
+    stats_select = copy.deepcopy(stats_input)
+    
+    for key, stats in stats_select.items():
+        if type(stats) == dict and 'energy' in stats.keys():
+            for i, conf in enumerate(stats['energy']):
+                new_conf =  [c[m_index] for c in conf[0:2]]
+                new_conf.append(conf[2][p_index])
                 stats['energy'][i] = new_conf
                 
     stats_select['hyperparams']['pair'] = list(np.array(stats_select['hyperparams']['pair'])[p_index])

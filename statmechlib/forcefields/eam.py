@@ -13,6 +13,7 @@ except:
 Collection of EAM functions
 """
 
+import copy
 import numpy as np
 from .potentials import f_spline3
 
@@ -173,7 +174,10 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
         # calculate electronic density for each atom
         # coefficient for the last spline section is 1 by definition
         # rho_func.shape should be (n_atom, )
+        #rho_func = sum([p*s if p*s < rhomax else rhomax for p, s in zip(hd, ustats[i][3][:])]) 
         rho_func = sum([p*s for p, s in zip(hd, ustats[i][3][:])]) 
+        rhomax = 70.51
+        rho_func = np.where(rho_func > rhomax, rhomax, rho_func) 
 
         #print('rho_func:\n', sum(rho_func)/len(rho_func))
 
@@ -228,7 +232,8 @@ def utot_EAM_per_box(params, ustats, hparams=[-1]):
 
     # electronic density coefficients. The first coefficient is always 1
     assert len(hparams['edens']) == 1, 'number of edens knots not equal to 1: {0}'.format(len(hparams['edens'])) 
-    assert len(params) == 2 + len(hp), 'number of params does not sum to 2+pair params: {0}'.format(len(params))
+    if len(hparams['edens']) != 1:
+        assert len(params) == 2 + len(hp), 'number of params does not sum to 2+pair params: {0}'.format(len(params))
 
     # pair interactions from array of spline coefficeints and corresponding statistic
     u_pair = np.array([sum([a*s for a, s in zip(hp, ustats[i][2][:])]) for i in range(n_sample)])
@@ -285,7 +290,7 @@ def ftot_EAM(params, fstats):
     return np.array(f_total)
 
 
-def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose=0):
+def sd2_loss(params_test, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose=0, params_fix=[]):
     """
     Calculates squared statistical distance loss function for configurational energies and forces.
 
@@ -309,6 +314,15 @@ def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose
     sd2, sd2f: float
                Squared statistical distances between model and target (energy and force-based)
     """
+
+    if params_fix:
+        # same embedding
+        params = copy.copy(params_fix)
+        params[0:2] = params_test[0:2]
+        #params[2:6] = params_test[0:4]
+        #params[23:26] = params_test[4:7]
+    else:
+        params = params_test
 
     # apply bounds on parametes
     #p = np.where(p < -1.0, -1.0, p)
