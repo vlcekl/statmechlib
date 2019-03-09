@@ -11,7 +11,7 @@ import copy
 import numpy as np
 from .pair_dist import pair_dist, pair_dist_cutoff
 
-def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, rmax=None):
+def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None):#, rmax=None):
     """
     Takes atom pair distances and calculates per atom-statistics needed
     for the parameterization of a cubic spline-based EAM model similar to
@@ -30,8 +30,6 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, r
          cubic b-spline definition
     rcut: float
           EAM potential cutoff distance
-    rmax: float
-          
 
     Returns
     -------
@@ -43,13 +41,16 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, r
                  grad(el_density**0.5), grad(el_density), grad(el_density**2)
     """
  
-    # set rcut to the potential cutoff
-    if rcut == None:
-        rcut = sc[-4]
+#    # set rcut to the potential cutoff
+#    if rcut == None:
+#        rcut = sc[-4]
+#
+#    # set rmax to the most distant knot for b-spline definition
+#    if rmax == None:
+#        rmax = sc[-1]
 
-    # set rmax to the most distant knot for b-spline definition
-    if rmax == None:
-        rmax = sc[-1]
+    if rcut == None:
+        rcut = sc[-1]
 
     xyz = config[0]
     box = config[1]
@@ -108,7 +109,7 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, r
 
     return a1, ar, a2, ax, b1, br, b2, c1
 
-def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None, rmax=None):
+def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None):#, rmax=None):
     """
     Takes atom pair distances and calculates per box-statistics needed
     for the parameterization of a cubic spline-based EAM model by Bonny et al. (2017),
@@ -136,16 +137,16 @@ def get_stats_EAM_per_box(xyz, box, atom_type=None, sc=[2., 3., 4.], rcut=None, 
     """
  
     # set rcut to max if None
-    #if rcut == None:
-    #    rcut = max(sc)
-
-    # set rcut to the potential cutoff
     if rcut == None:
-        rcut = sc[-4]
+        rcut = sc[-1]
 
-    # set rmax to the most distant knot for b-spline definition
-    if rmax == None:
-        rmax = sc[-1]
+#    # set rcut to the potential cutoff
+#    if rcut == None:
+#        rcut = sc[-4]
+#
+#    # set rmax to the most distant knot for b-spline definition
+#    if rmax == None:
+#        rmax = sc[-1]
 
     # get pair distances (absolute and Cartesian components)
     rr, rx = pair_dist_cutoff(xyz, box, rcut)
@@ -300,8 +301,8 @@ def tpf_to_bsplines(stats_tpf):
 
     stats_bspline = {}
     stats_bspline['hyperparams'] = copy.deepcopy(stats_tpf['hyperparams'])
-    stats_bspline['hyperparams']['edens'] = stats_bspline['hyperparams']['edens'][:-4]
-    stats_bspline['hyperparams']['pair'] = stats_bspline['hyperparams']['pair'][:-4]
+    #stats_bspline['hyperparams']['edens'] = stats_bspline['hyperparams']['edens']
+    #stats_bspline['hyperparams']['pair'] = stats_bspline['hyperparams']['pair']
 
     stats_bspline['function'] = stats_tpf['function']
 
