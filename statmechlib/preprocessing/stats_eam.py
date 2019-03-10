@@ -301,8 +301,6 @@ def tpf_to_bsplines(stats_tpf):
 
     stats_bspline = {}
     stats_bspline['hyperparams'] = copy.deepcopy(stats_tpf['hyperparams'])
-    #stats_bspline['hyperparams']['edens'] = stats_bspline['hyperparams']['edens']
-    #stats_bspline['hyperparams']['pair'] = stats_bspline['hyperparams']['pair']
 
     stats_bspline['function'] = stats_tpf['function']
 
