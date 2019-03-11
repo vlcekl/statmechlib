@@ -301,6 +301,9 @@ def tpf_to_bsplines(stats_tpf):
 
     stats_bspline = {}
     stats_bspline['hyperparams'] = copy.deepcopy(stats_tpf['hyperparams'])
+    # index splines based on the shortest-distance knot
+    stats_bspline['hyperparams']['pair'] = stats_bspline['hyperparams']['pair'][:-4]
+    stats_bspline['hyperparams']['edens'] = stats_bspline['hyperparams']['edens'][:-4]
 
     stats_bspline['function'] = stats_tpf['function']
 

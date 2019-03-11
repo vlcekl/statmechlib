@@ -311,12 +311,12 @@ def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose
 
     # pair potential
     cs = pre_knots['pair'] + params[2:len(hparams['pair'])] + post_knots['pair']
-    reg = sum([ cs[i]+3*cs[i+1]+3*cs[i+2]+cs[i+4]  for i in range(len(cs))])
+    reg = sum([ cs[i]-3*cs[i+1]+3*cs[i+2]-cs[i+4]  for i in range(len(cs))])
 
     # electronic density spline
     if len(hparams['edens']) > 1:
         cs = pre_knots['edens'] + params[2:len(hparams['edens'])] + post_knots['edens']
-        reg += sum([ cs[i]+3*cs[i+1]+3*cs[i+2]+cs[i+4]  for i in range(len(cs))])
+        reg += sum([ cs[i]-3*cs[i+1]+3*cs[i+2]-cs[i+4]  for i in range(len(cs))])
     
     return sd2 + reg
 
