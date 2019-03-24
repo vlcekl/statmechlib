@@ -174,8 +174,8 @@ def utot_EAM_per_atom(params, ustats, hparams=None):
         # calculate electronic density for each atom
         # coefficient for the last spline section is 1 by definition
         # rho_func.shape should be (n_atom, )
-        #rho_func = sum([p*s if p*s < rhomax else rhomax for p, s in zip(hd, ustats[i][3][:])]) 
-        # cycles over knots and parameter multiplies all atoms
+        # rho_func = sum([p*s if p*s < rhomax else rhomax for p, s in zip(hd, ustats[i][3][:])]) 
+        # cycles over knots, and each parameter multiplies all atoms at the same time
         rho_func = sum([p*s for p, s in zip(hd, ustats[i][3][:])]) 
         rhomax = 70.51
         rho_func = np.where(rho_func > rhomax, rhomax, rho_func) 

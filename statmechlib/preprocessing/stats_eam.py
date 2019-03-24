@@ -301,9 +301,14 @@ def tpf_to_bsplines(stats_tpf):
 
     stats_bspline = {}
     stats_bspline['hyperparams'] = copy.deepcopy(stats_tpf['hyperparams'])
+
     # index splines based on the shortest-distance knot
+
+    # reduce the knot list by excluding the last four that are spanned by the
+    # last b-spline basis function
     stats_bspline['hyperparams']['pair'] = stats_bspline['hyperparams']['pair'][:-4]
-    stats_bspline['hyperparams']['edens'] = stats_bspline['hyperparams']['edens'][:-4]
+    # keep full knot list for edens function
+    stats_bspline['hyperparams']['edens'] = stats_bspline['hyperparams']['edens'][:]
 
     stats_bspline['function'] = stats_tpf['function']
 
@@ -330,12 +335,16 @@ def tpf_to_bsplines(stats_tpf):
                 stat_new = []
 
                 # add contributions from tpf 
-                for i in range(len(knots_tpf)-4):
+                for i in range(len(knots_tpf)):
 
                     if ir < 2:
                         # this is for stats 0 and 1 (no b-splines)
                         bs = copy.deepcopy(stat[i])
                     else:
+                        # the last cubic b-spline starts 4 knots from the end
+                        if i >= len(knots_tpf)-4:
+                            continue
+
                         # this is for stats 2 and 3: convert tpf to b-splines
                         if isinstance(stat[i], float):
                             bs = 0.0

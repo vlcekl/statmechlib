@@ -1,4 +1,4 @@
-from __future__ import print_function #, unicode_literals
+from __future__ import print_function  # unicode_literals
 from __future__ import absolute_import, division
 try:
     xrange = xrange
@@ -11,8 +11,9 @@ import numpy as np
 import copy
 
 eos_params = {
-    'W':{'l':0.274, 'r_wse':1.584, 'eta':5.69, 'dE':8.9}
+    'W': {'l': 0.274, 'r_wse': 1.584, 'eta': 5.69, 'dE': 8.9}
 }
+
 
 def universal_eos(x, system='W'):
     """
@@ -103,7 +104,14 @@ def downselect(stats_inp, pair_knots, edens_knots):
 
     # create boolean arrays with select indices set to True
     p_ix = np.array([True if i in pair_index else False for i in range(len(stats_inp['hyperparams']['pair']))])
-    m_ix = np.array([True if i in edens_index else False for i in range(len(stats_inp['hyperparams']['edens']))])
+
+    if len(edens_knots) > 1:
+        # if we use b-splines use the limited edens knots
+        m_ix = np.array([True if i in edens_index else False for i in range(len(stats_inp['hyperparams']['edens'][:-4]))])
+    else:
+        # if a single tpf basis function is select from the full set of knots
+        m_ix = np.array([True if i in edens_index else False for i in range(len(stats_inp['hyperparams']['edens']))])
+
 
     if len(edens_knots) > 1:
         stats_out = select_nodes(stats_inp, p_ix, m_ix)
@@ -134,12 +142,13 @@ def select_nodes(stats_input, p_index, m_index):
                 #new_conf[0] = conf[0][index]
                 #new_conf[1] = conf[1][index]
                 #new_conf[2] = conf[2][index]
-                new_conf =  [c[p_index] for c in conf[0:3]]
+                new_conf = [conf[2][p_index]]
+                #new_conf =  [c[p_index] for c in conf[0:3]]
                 new_conf.append(conf[3][m_index])
                 stats['energy'][i] = new_conf
                 
     stats_select['hyperparams']['pair'] = list(np.array(stats_select['hyperparams']['pair'])[p_index])
-    stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'])[m_index])
+    stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'][:-4])[m_index])
 
     return stats_select
 
