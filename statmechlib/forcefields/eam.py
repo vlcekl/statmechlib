@@ -522,3 +522,82 @@ def u_components(all_params, stats):
     u_parts = {'u_pair':u_pair, 'edens':edens, 'u_many':u_many, 'u_total': u_total}
 
     return u_parts
+
+def u_components_per_box(all_params, stats):
+    """
+    Calculates configurational energy from EAM sufficient statistics and model parameters
+
+    Parameters
+    ----------
+    all_params : dict of lists of floats
+             EAM interaction parameters and hperparameters
+    stats : list of lists and floats
+             Sufficient statistics for a trajectory of configurations
+
+    Returns
+    -------
+    u_parts: dict of lists of floats
+        components of total energy (+electronic density) for each
+        configuration in trajectory
+    """
+
+    hparams = all_params['hyperparams']
+    params = all_params['params']
+
+    ustats = stats['energy']
+
+    n_sample = len(ustats)
+
+    # pair interaction coefficients
+    npair = len(hparams['pair']) 
+    hp = params['pair']
+    #print('hp', hp)
+    #print(ustats)#), len(ustats[0][2]))
+
+    # electronic density coefficients. The first coefficient is always 1
+    ndens = len(hparams['edens'])
+    hd = params['edens']
+
+    # embedding function
+    he = params['embed']
+
+    #print('n', n_sample, npair, ndens)
+
+    # pair interactions (per box) from array of spline coefficeints and corresponding statistic
+    # sum over spline components, make array over samples
+    u_pair = np.array([sum([a*s for a, s in zip(hp, ustats[i][2][:])]) for i in range(n_sample)])
+
+    # cycle over samples for manybody interactions
+    embed_r = []
+    embed_2 = []
+    edens = []
+    for i in range(n_sample):
+        # calculate electronic density for each atom
+        # coefficient for the last spline section is 1 by definition
+        # rho_func.shape should be (n_atom, )
+
+        #rho_func = sum([p*s for p, s in zip(hd, ustats[i][3][:])]) 
+        #print('type', type(rho_func), rho_func.shape)
+
+        #edens.append(np.sum(rho_func)/rho_func.shape[0])
+
+        rho_func = ustats[i][2][-1]
+        edens.append(rho_func/128)
+
+        #assert rho_func.shape[0] == ustats[i][3][0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2][0].shape[0]}"
+        #assert rho_func.shape[0] == ustats[i][3][0].shape[0], "rho_func shape {} does not match number of atoms == ustats shape {}".format(rho_func_shape[0], ustats[i][2][0].shape[0])
+
+        # sum sqrt and squared atom contributions to embedding function
+        embed_r.append(np.sum(np.sqrt(rho_func)))
+        embed_2.append(np.sum(rho_func**2))
+
+
+    u_many = np.array([he[0]*embed_r[i] + he[1]*embed_2[i] for i in range(n_sample)])
+
+    assert u_pair.shape == u_many.shape, "Shapes of u_pair ({}) and u_many ({}) do not match.".format(u_pair.shape, u_many.shape)
+
+    u_total = 0.5*u_pair + u_many
+
+    u_parts = {'u_pair':u_pair, 'edens':edens, 'u_many':u_many, 'u_total': u_total}
+
+    return u_parts

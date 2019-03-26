@@ -96,7 +96,7 @@ def map_histograms(hist, mapfunc):
 
     return new_hist
 
-def downselect(stats_inp, pair_knots, edens_knots):
+def downselect(stats_inp, pair_knots, edens_knots, bspline=True):
 
     # find idices of knots
     pair_index = find_index(pair_knots, stats_inp['hyperparams']['pair'])
@@ -105,22 +105,25 @@ def downselect(stats_inp, pair_knots, edens_knots):
     # create boolean arrays with select indices set to True
     p_ix = np.array([True if i in pair_index else False for i in range(len(stats_inp['hyperparams']['pair']))])
 
-    if len(edens_knots) > 1:
+    if bspline:
         # if we use b-splines use the limited edens knots
-        m_ix = np.array([True if i in edens_index else False for i in range(len(stats_inp['hyperparams']['edens'][:-4]))])
+        if len(edens_knots) > 1:
+            m_ix = np.array([True if i in edens_index else False for i in range(len(stats_inp['hyperparams']['edens'][:-4]))])
+        else:
+            m_ix = np.array([True if i in edens_index else False for i in range(len(stats_inp['hyperparams']['edens']))])
     else:
         # if a single tpf basis function is select from the full set of knots
         m_ix = np.array([True if i in edens_index else False for i in range(len(stats_inp['hyperparams']['edens']))])
 
 
     if len(edens_knots) > 1:
-        stats_out = select_nodes(stats_inp, p_ix, m_ix)
-    elif len(edens_knots) == 1:
+        stats_out = select_nodes(stats_inp, p_ix, m_ix, bspline)
+    else:
         stats_out = select_knots_perbox(stats_inp, p_ix, m_ix)
 
     return stats_out
 
-def select_nodes(stats_input, p_index, m_index):
+def select_nodes(stats_input, p_index, m_index, bspline):
     """
     Select only configuration statistics from stats (spline nodes) that are given in index.
     Parameters
@@ -139,16 +142,19 @@ def select_nodes(stats_input, p_index, m_index):
         if type(stats) == dict and 'energy' in stats.keys():
             for i, conf in enumerate(stats['energy']):
                 #new_conf = np.empty((3, sum(index)), dtype=float)
-                #new_conf[0] = conf[0][index]
-                #new_conf[1] = conf[1][index]
+                new_conf = [conf[0][-1]]
+                new_conf.append(conf[1][-1])
                 #new_conf[2] = conf[2][index]
-                new_conf = [conf[2][p_index]]
+                new_conf.append(conf[2][p_index])
                 #new_conf =  [c[p_index] for c in conf[0:3]]
                 new_conf.append(conf[3][m_index])
                 stats['energy'][i] = new_conf
                 
     stats_select['hyperparams']['pair'] = list(np.array(stats_select['hyperparams']['pair'])[p_index])
-    stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'][:-4])[m_index])
+    if bspline:
+        stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'][:-4])[m_index])
+    else:
+        stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'][:])[m_index])
 
     return stats_select
 
@@ -176,7 +182,8 @@ def select_knots_perbox(stats_input, p_index, m_index):
                 stats['energy'][i] = new_conf
                 
     stats_select['hyperparams']['pair'] = list(np.array(stats_select['hyperparams']['pair'])[p_index])
-    stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'])[m_index])
+    #stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'])[m_index])
+    stats_select['hyperparams']['edens'] = list(np.array(stats_select['hyperparams']['edens'][:])[m_index])
 
     return stats_select
 
@@ -276,6 +283,8 @@ def find_index(select_list, full_list):
                 knots.append(i)
                 break
     
+    #print('knots', knots)
+    #print('select_list', select_list)
     assert len(knots) == len(select_list), "Knots and select_list lengths do not match"
     
     return knots
