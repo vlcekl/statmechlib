@@ -523,7 +523,7 @@ def u_components(all_params, stats):
 
     return u_parts
 
-def u_components_per_box(all_params, stats):
+def u_components_per_box(all_params, stats, knot_id):
     """
     Calculates configurational energy from EAM sufficient statistics and model parameters
 
@@ -581,7 +581,7 @@ def u_components_per_box(all_params, stats):
 
         #edens.append(np.sum(rho_func)/rho_func.shape[0])
 
-        rho_func = ustats[i][2][-1]
+        rho_func = ustats[i][2][knot_id]
         edens.append(rho_func/128)
 
         #assert rho_func.shape[0] == ustats[i][3][0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2][0].shape[0]}"
