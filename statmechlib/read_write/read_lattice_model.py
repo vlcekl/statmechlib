@@ -108,7 +108,7 @@ def read_modeldef(filename):
     return params
 
 
-def read_lattice_model(latt_dir, verbose=True):
+def read_lattice_model(latt_dir, verbose=False):
     """
     Reads configuration and energy files from a VASP MD simulation in a given directory
     and returns trajectory data in a dictionary.
@@ -141,7 +141,7 @@ def read_lattice_model(latt_dir, verbose=True):
 
         if os.path.isfile(file_name):
             if verbose:
-                #print(f"Reading {file_name}")
+                print(f"Reading {file_name}")
                 print("Reading {}".format(file_name))
 
             alldata[name] = read_func(file_name)

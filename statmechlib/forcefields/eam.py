@@ -601,3 +601,5 @@ def u_components_per_box(all_params, stats, knot_id):
     u_parts = {'u_pair':u_pair, 'edens':edens, 'u_many':u_many, 'u_total': u_total}
 
     return u_parts
+
+

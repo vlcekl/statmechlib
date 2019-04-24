@@ -104,6 +104,7 @@ def sd2(params, stats, targets):
         targ = targets[key]
         stat = stats[key]
         w = targ.get('weight', 1.0)     # weight of the target data set
+        w = 1.0
 
         beta = 1.0/np.mean(stat['temp'])
         hru = stat['interaction_stats'] # interaction histogram statistics
@@ -128,16 +129,19 @@ def sd2(params, stats, targets):
         # statistical distance for surface configuration histograms
         phst = targ['config_stats']     # target histogram
         rhst = stat['config_stats']     # reference histograms for each configuration
-        qhst = np.sum(rhst.T*eee, axis=1) # rescaled average reference histogram
+        #qhst = np.sum(rhst.T*eee, axis=1) # rescaled average reference histogram
+        qhst = rhst.T.dot(eee)
+        #qhst = np.mean(rhst, axis=0)#.T.dot(eee)
         #qhst_var = np.var(rhst.T*eee, axis=1) # variance of the rescaled reference histogram 
         #print('rhst.shape', rhst.shape, qhst_var.shape, qhst_var)
         #print('qhst', qhst)
 
         # Statistical distance contribution
         sd2 += w*np.arccos(np.sum(np.sqrt(qhst*phst)))**2
+        #sd2 += w*np.arccos(np.sum(np.sqrt(qhst).dot(np.sqrt(phst))))**2
         #print(key, w, np.arccos(np.sum(np.sqrt(qhst*phst)))**2)
         #sd2_ref += w*np.sum(qhst_var)
 
-    #print('---', sd2+sd2_ref, sd2, sd2_ref, eee.shape)
-    return sd2 + sd2_ref
+    #print('---', sd2, sd2+sd2_ref, sd2, sd2_ref, eee.shape)
+    return sd2  #, sd2_ref  # + sd2_ref
 

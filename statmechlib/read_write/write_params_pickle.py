@@ -11,7 +11,7 @@ import sys
 import re
 import pickle
 
-def params_to_pickle(params_dict, params_pickle, option='r+b', protocol=2):
+def params_to_pickle(params_dict, params_pickle, option='r+b', protocol=2):#, encoding='latin1'):
     """
     Store hyperparameters and output parameters in a pickle.
     By default, append new parameters to an existing file and create a new one if it does not exist
@@ -38,7 +38,7 @@ def params_to_pickle(params_dict, params_pickle, option='r+b', protocol=2):
     if option == 'r+b':
         try:
             with open(params_pickle, 'rb') as fi:
-                params_store.extend(pickle.load(fi))
+                params_store.extend(pickle.load(fi), encoding=encoding)
         except IOError:
             print('No existing params file, creating a new one.')
     

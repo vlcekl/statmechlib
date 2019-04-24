@@ -14,425 +14,290 @@ Collection of EAM functions
 """
 
 import numpy as np
-from .potentials import f_spline3
 
-# Functional form for the embedding potential and its scaled form
-f_embed = lambda d, a: a[0]*d**0.5 + a[1]*d**2
-f_embed_lin = lambda d, a: a[0]*d**0.5 + a[1]*d + a[2]*d**2
-f_embed_s = lambda d, a: f_embed_lin(d/S, a) - C*d/S 
 
-# Density function and its scaled form
-f_dens = lambda x, dens_a, dens_r: f_spline3(x, dens_a, dens_r)
-f_dens_s = lambda x, dens_a, dens_r: f_spline3(x, dens_a, dens_r)*S
-
-def u_equi(r, pair_a, pair_r, dens_a, dens_r):
+def make_input_matrices(target, stats, keytrj=None, combined=0.0):
     """
-    Equilibrium (normal, adjustable) part of the pair potential
-    based on cubic splines.
+    Creates input data for energy minimization with target as dependent variable and stats as independent.
+    Assumes that all appropriate knots from stats have been selected, so it includes everything.
     """
+    
+    # matrix of independent variables (Embedding and B-spline coefficients)
+    X0 = []
+    X1 = []
+    # vector of dependent variable (configurational energies)
+    y = []
+    # weights of individual trajectories
+    weights = []
+    # vector of inverse temperatures
+    beta = []
+    # bounds of trajectories in the overall design matrix
+    bounds = []
 
-    # cubic spline pair potential
-    u = f_spline3(x, pair_a, pair_r)
-
-    # gauge transformation into regular form
-    u += 2*C*f_spline3(x, dens_a, dens_r)
-
-    return u
-
-# Define the core parts of the potential (kept constant)
-def u_core(r, za=74, zb=74):
-    """
-    Repulsive potential of the atomic cores. Default atomic numbers for W
-
-    Parameters
-    ----------
-    r: float
-       atom pair distance
-    za, zb: floats
-       atomic numbers of the two atoms
-
-    Returns
-    ------
-    u: float
-       pair energy at pair distance r
-    """
-
-    qe_sq = 14.3992 # squared electron charge  
-    rs = 0.4683766/(za**(2/3) + zb**(2/3))**0.5
-    x = r/rs
-
-    u = 0.0
-    if r > 0.0:
-        u += 0.1818*np.exp(-3.2*x)
-        u += 0.5099*np.exp(-0.9423*x)
-        u += 0.2802*np.exp(-0.4029*x)
-        u += 0.02817*np.exp(-0.2016*x)
-        u *= za*zb*qe_sq/r
-
-    return u
-
-def f_pair(r, param_a, param_r, za=78, zb=78, ri=1.0, ro=2.0):
-    """
-    Overall EAM pair potential combining inner, transition, and outer parts.
-    The inner part is fixed, while the outer part is based on supplied spline
-    function (cubic by default). Transition part ensures smooth change from
-    inner to outer.
-
-    Parameters
-    ----------
-    r: float
-       pair distance
-    param_a, param_r: lists of floats
-                      Parameters of the cubic spline for 
-    za, zb: floats
-            atomic numbers of the two atoms (default to W-W)
-    ri, ro: floats
-            inner and outer boundary of the transition region
-
-    Returns
-    -------
-    u: float
-       value of the pair potential at pair distance r
-    """
-
-    if r < ri:
-        u = u_core(r, za, zb)
-
-    elif r < ro:
-        x = (ro + ri - 2*r)/(ro - ri)
-        eta = 3/16*x**5 - 5/8*x**3 + 15/16*x + 1/2
-
-        unucl = u_core(r, za, zb)
-        uequi = u_equi(r, pair_a, pair_r, dens_a, dens_r)
-
-        u = uequi + eta*(unucl - uequi)
-
+    keys = list(target.keys())
+    
+    if keytrj is not None:
+        keys = keytrj
     else:
-        u = u_equi(r, pair_a, pair_r, dens_a, dens_r)
+        keys = list(target.keys())
 
-    return u
-
-def utot_EAM_per_atom(params, ustats, hparams=None):
-    """
-    Calculates configurational energy from EAM sufficient statistics and model parameters
-
-    Parameters
-    ----------
-    params : list of lists and floats
-             EAM interaction parameters (spline coefficients array and embedding function parameters)
-    ustats : list of lists and floats
-             Sufficient statistics for a trajectory of configurations
-    hparams: dict of lists
-             hyperparameters - spline knots for pair potential and density function
-
-    Returns
-    -------
-    u_total: float
-             total configurational energy (sum of pair and manybody interactions) for trajectory of configurations
-    """
-
-    n_sample = len(ustats)
-
-    # assign parameters to different functions
-    if not hparams:     # no hparams given
-        hp = params[2:] # pair interaction coefficients
-        hd = [1.0]      # electronic density coefficients. Default single coefficient with value 1
-        #hc = [0.0]
-    else:
-        # pair interaction coefficients
-        npair = len(hparams['pair']) 
-        hp = params[2:2+npair]
-
-        # electronic density coefficients. The first coefficient is always 1
-        ndens = len(hparams['edens'])
-        if ndens < 1:
-            hd = [1.0]
-        else:
-            #if len(params[2+npair:-1]) == ndens:
-            if len(params[2+npair:]) == ndens:
-                hd = params[2+npair:2+npair+ndens]
-            else:
-                #assert 2+npair+ndens-1 == len(params), f"Wrong number of parameters: {len(params)} vs. {2+npair+ndens-1}"
-                assert 2+npair+ndens-1 == len(params), "Wrong number of parameters: {} vs. {}".format(len(params), 2+npair+ndens-1)
-                hd = np.concatenate((params[2+npair:2+npair+ndens-1], [1.0]))
-
-        #hc = params[-1:]
-    #!!! not general !!! limit last edens parameter to positive values to preserve positive discriminant
-    if hd[-1] < 0.0:
-        hd[-1] = 0.0
-        params[2+npair:2+npair+ndens] = 0.0
-
-    # pair interactions (per box) from array of spline coefficeints and corresponding statistic
-    # sum over spline components, make array over samples
-    u_pair = np.array([sum([a*s for a, s in zip(hp, ustats[i][2][:])]) for i in range(n_sample)])
-
-    # cycle over samples for manybody interactions
-    embed_r = []
-    embed_2 = []
-    for i in range(n_sample):
-        # calculate electronic density for each atom
-        # coefficient for the last spline section is 1 by definition
-        # rho_func.shape should be (n_atom, )
-        rho_func = sum([p*s for p, s in zip(hd, ustats[i][3][:])]) 
-
-        #print('rho_func:\n', sum(rho_func)/len(rho_func))
-
-        #assert rho_func.shape[0] == ustats[i][3][0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2][0].shape[0]}"
-        assert rho_func.shape[0] == ustats[i][3][0].shape[0], "rho_func shape {} does not match number of atoms == ustats shape {}".format(rho_func_shape[0], ustats[i][2][0].shape[0])
-
-        # sum sqrt and squared atom contributions to embedding function
-        embed_r.append(np.sum(np.sqrt(rho_func)))
-        embed_2.append(np.sum(rho_func**2))
-
-
-    # manybody interactions from embedding function parameters and corresponding statistics
-    # u_many = np.array([params[0]*ustats[i][0][hp] + params[1]*ustats[i][1][hp] for i in range(n_sample)])
-    u_many = np.array([params[0]*embed_r[i] + params[1]*embed_2[i] for i in range(n_sample)])
-
-
-    #assert u_pair.shape == u_many.shape, f"Shapes of u_pair ({u_pair.shape}) and u_many ({u_many.shape}) do not match."
-    assert u_pair.shape == u_many.shape, "Shapes of u_pair ({}) and u_many ({}) do not match.".format(u_pair.shape, u_many.shape)
-
-    u_total = 0.5*u_pair + u_many
-
-    # apply long range correction: correction * number of particles * concentration * density (stored in ustats[4]) 
-    #u_total += np.array([sum([a*s for a, s in zip(hc, ustats[i][4][:])]) for i in range(n_sample)])
-
-    return u_total
-
-
-def utot_EAM_per_box(params, ustats, hparams=[-1]):
-    """
-    Calculates configurational energy from EAM sufficient statistics and model parameters
-
-    Parameters
-    ----------
-    params : list of lists and floats
-             EAM interaction parameters (spline coefficients array and embedding function parameters)
-    ustats : list of lists and floats
-             Sufficient statistics for a trajectory of configurations
-    hparams: list of ints
-             hyperparameters - distance cutoff of the density function
-
-    Returns
-    -------
-    u_total: float
-             total configurational energy (sum of pair and manybody interactions) for trajectory of configurations
-    """
-
-    n_sample = len(ustats)
-
-    # pair interaction coefficients
-    npair = len(hparams['pair']) 
-    hp = params[2:2+npair]
-
-    # electronic density coefficients. The first coefficient is always 1
-    assert len(hparams['edens']) == 1, 'number of edens knots not equal to 1: {0}'.format(len(hparams['edens'])) 
-    assert len(params) == 2 + len(hp), 'number of params does not sum to 2+pair params: {0}'.format(len(params))
-
-    # pair interactions from array of spline coefficeints and corresponding statistic
-    u_pair = np.array([sum([a*s for a, s in zip(hp, ustats[i][2][:])]) for i in range(n_sample)])
-
-    # manybody interactions from embedding function parameters and corresponding statistics
-    u_many = np.array([params[0]*ustats[i][0][0] + params[1]*ustats[i][1][0] for i in range(n_sample)])
-
-    u_total = 0.5*u_pair + u_many
-    #print(u_pair, u_many, u_total)
-
-    return u_total
-
-
-
-def sd2_loss(params, targets, stats, utot_func, ftot_func=None, dl=0.05, verbose=0):
-    """
-    Calculates squared statistical distance loss function for configurational energies and forces.
-
-    Parameters
-    ----------
-    params : ndarray of floats
-             EAM interaction parameters (spline coefficients array and embedding function parameters)
-    targets: dict of dicts
-             target energies and forces
-    stats  : dict of dicts
-             Statistics describing particle configurations
-    utot_func: function
-               takes parameters and statistics and returns configurational energies
-    ftot_func: function
-               takes parameters and statistics and returns atomic forces
-    dl: float
-        coordinate perturbation magnitude for energy calculation from forces: du = f*dl
-
-    Returns
-    -------
-    sd2, sd2f: float
-               Squared statistical distances between model and target (energy and force-based)
-    """
-
-    # apply bounds on parametes
-    #p = np.where(p < -1.0, -1.0, p)
-    #p = np.where(p >  1.0,  1.0, p)
-
-    hparams = stats['hyperparams']
-
-    # cycle over target system trajectories and statistics to determine SD
-    sd2 = sd2f = 0.0
-    for key in targets.keys():
-
-        targ = targets[key]
-        stat = stats[key]
-
-        beta = np.mean(targ['beta']) # system inverse temperature
-        u_targ = np.array(targ['energy']) # target energies
-        u_stat = stat['energy'] # energy statistics
-        n_sample = len(u_targ)
-        w = targ.get('weight', 1.0)
-
-        #print('len', len(u_targ), len(u_stat))
-
+    max_features = 0
+    max_atoms = 0
+    for key in keys:
+        
+        w = target[key]['weight']
+        
+        # eliminate trajectories with 0 weight
         if w == 0.0:
             continue
 
-        # energy diference array for a given target trajectory
-        uuu = beta*(utot_func(params, u_stat, hparams) - u_targ) # array(n_sample)
-        uuu -= np.mean(uuu)
-        eee = np.exp(-uuu)
+        lo_bound = len(y)
+        
+        # cycle over samples (configurations)
 
-        # energy-based free energy difference and statistical distance
-        ge = -np.log(np.mean(eee))   # free energy difference (shifted)
-        cb = np.mean(np.exp(-0.5*(uuu - ge))) # Bhattacharyya coefficient
-        sd2 += w*np.arccos(cb)**2              # statistical distance
+        for i, (config, energy, bb) in enumerate(zip(stats[key]['energy'], target[key]['energy'], target[key]['beta'])):
+            
+            # add energy
+            y.append(energy)
+            beta.append(bb)
+            #weights.append(w)
+            
+            # create an array of independent variables
+            x_vars = []
+            
+            # embedding for additive model
+            #x_vars += [config[0][0], config[1][0]]
 
-    if verbose > 0:
-        print('loss', sd2+sd2f, sd2, sd2f)
-        #print('params', params, type(params))
+            # pair interactions b-spline stats. Adds a list of descriptors
+            x_vars += list(0.5*config[2])
+            
+            # per atom edens b-spline stats. Adds an array (n_features, n_atoms)
+            xn_vars = config[3]
+            
+            max_features = max(max_features, xn_vars.shape[0])
+            max_atoms = max(max_atoms, xn_vars.shape[1])
 
-    # add regularization condition
-    # cubic parameter difference
-
-    # pair potential
-    cs = pre_knots['pair'] + params[2:len(hparams['pair'])] + post_knots['pair']
-    reg = sum([ cs[i]-3*cs[i+1]+3*cs[i+2]-cs[i+4]  for i in range(len(cs))])
-
-    # electronic density spline
-    if len(hparams['edens']) > 1:
-        cs = pre_knots['edens'] + params[2:len(hparams['edens'])] + post_knots['edens']
-        reg += sum([ cs[i]-3*cs[i+1]+3*cs[i+2]-cs[i+4]  for i in range(len(cs))])
+            X0.append(x_vars)
+            X1.append(xn_vars)
+            
+        bounds.append(slice(lo_bound, len(y), 1))
+        weights.append(w)
     
-    return sd2 + reg
+    if combined > 0.0:
+        # add trajectory of zeros by replicating 'inf'
+        
+        config = stats['inf']['energy'][0]
+        energy = target['inf']['energy'][0]
+        bb = target['inf']['beta'][0]
+        
+        for i in range(200):
+            # add energy
+            y.append(energy)
+            beta.append(bb)
+            #weights.append(w)
+            
+            # create an array of independent variables
+            x_vars = []
+            
+            # embedding for additive model
+            #x_vars += [config[0][0], config[1][0]]
+
+            # pair interactions b-spline stats. Adds a list of descriptors
+            x_vars += list(0.5*config[2])
+            
+            # per atom edens b-spline stats. Adds an array (n_features, n_atoms)
+            xn_vars = config[3]
+            
+            max_features = max(max_features, xn_vars.shape[0])
+            max_atoms = max(max_atoms, xn_vars.shape[1])
+
+            X0.append(x_vars)
+            X1.append(xn_vars)
+            
+        bounds.append(slice(0, len(y), 1))
+        weights.append(combined)
+
+    # Additive features to a 2D array in X[0] 
+    X0 = np.array(X0)
+    X = [X0]
+    
+    # Non-additive features to a 3D array to be filled with density function statistics.
+    # Organize the dimensions as (n_samples, n_atoms, n_features) so that dot product
+    # between edens parameters and the array to compute density on individual atoms
+    # is along the last (contiguous) dimension.
+    X.append(np.zeros((len(X1), max_atoms, max_features), dtype=float))
+    for i in range(len(X1)):
+        X[1][i,:X1[i].shape[1],:] = X1[i].T
+    
+    y = np.array(y)
+    
+    assert len(y) == len(X[0]), "Shapes of y and X[0] do not match"
+    assert len(y) == len(X[1]), "Shapes of y and X[1] do not match."
+    
+    print('bounds', bounds)
+    print('weights', weights)
+
+    return X, y, np.array(weights), np.array(beta), bounds
 
 
-def udif_print(params, targets, stats, utot_func):
+def energy(params, X):
+    """ Configurational energy of an EAM model.
     """
-    Calculates squared statistical distance loss function for configurational energies and forces.
+    
+    n_edens = X[1].shape[-1]
+    
+    # Pair energy
+    energy = X[0].dot(params[1:-n_edens])
+    
+    # calculates an (n_samples, n_atoms) matrix of atomic densities
+    edens = X[1].dot(params[-n_edens:])
 
-    Parameters
-    ----------
-    params : list of lists and floats
-             EAM interaction parameters (spline coefficients array and embedding function parameters)
-    targets: list of lists and floats
-             target energies and forces
-    stats  : list of lists and floats
-             Sufficient statistics
-    utot_func: function
-               takes parameters and statistics and returns configurational energies
+    # Manybody energy: A*sum(dens**0.5) + B*sum(dens**2)
+    # Here we set A to -1 to eliminate colinearity
+    energy += -1.0*np.sum(np.sqrt(edens), axis=1)
+    energy += params[0]*np.sum(edens**2, axis=1)
+        
+    return energy
 
+def loss_energy(params, X, y, weights):
+    """Total energy loss (least squares)"""
+
+    du = y - energy(params, X)
+    loss = du.T.dot(np.diag(weights)).dot(du)
+
+    return loss
+
+
+def loss_sd2(params, X, y, weights, bounds, beta):
+    """Statistical distance loss"""
+
+    beta_du = beta*(y - energy(params, X))
+
+    # statistical distance
+    # * divide system into individual trajectories (use bounds)
+#     loss = 0.0
+#     for ib, x_lo, x_hi in enumerate(bounds):
+#         uuu = beta_du[x_lo:x_hi]
+#         uuu -= np.mean(uuu)
+#         eee = np.exp(-uuu)
+#         ge = np.log(np.mean(eee))              # -beta*dF
+#         cb = np.mean(np.exp(-0.5*(uuu + ge)))  # Bhattacharyya coefficient
+#         loss += weights[ib]*np.arccos(cb)**2   # statistical distance
+
+    loss = 0.0
+    for ib, bound_slice in enumerate(bounds):
+        du = beta_du[bound_slice]             # du (view of the original beta*du)
+        du_ave = np.mean(du)                   # average du
+        exp_duh = np.exp(-0.5*(du - du_ave))     # exp[-beta*du/2]
+        cb = np.mean(exp_duh)                    # cb = <exp[-beta*du/2]>
+        cb /= np.sqrt(np.mean(exp_duh**2))       # Bhattacharyya coeff.: cb/exp[-beta*dF/2]
+        #print('loss cb', cb)
+        loss += weights[ib]*np.arccos(cb)**2   # statistical distance
+
+    return loss
+
+def loss_diff_penalty(params, penalty_mat, alpha):
+    """Difference penalty loss for B-splines"""
+    return 0.5*alpha*params.T.dot(penalty_mat).dot(params)
+
+
+def loss_energy_penalized(params, X, y, weights, penalty_mat, alpha):
+    """Total energy loss with difference penalty"""
+
+    loss = loss_energy(params, X, y, weights)
+    loss_diff = loss_diff_penalty(params, penalty_mat, alpha)
+    
+    print(loss + loss_diff, loss, loss_diff)
+
+    return loss + loss_diff
+
+def loss_sd2_penalized(params, X, y, weights, bounds, beta, penalty_mat, alpha):
+    """Total sd2 loss with difference penalty"""
+    
+    loss = loss_sd2(params, X, y, weights, bounds, beta)
+    loss_diff = loss_diff_penalty(params, penalty_mat, alpha)
+
+    print(loss + loss_diff, loss, loss_diff)
+
+    return loss + loss_diff
+
+
+def gradient_energy(params, X):
+    """Calculates gradient of energy with respect to parameters.
+    
     Returns
     -------
-    opti_out, targ_out: lists of floats
-            model and target configurational energies
+    grad : ndarray, shape (N, p)
     """
+
+    # electronic densities
+    n_edens = X[1].shape[-1]
+    edens = X[1].dot(params[-n_edens:])
     
-    hparams = stats['hyperparams']
+    with np.errstate(divide='ignore'):
+        # (-1) is there for the constant parameter value
+        tmp = np.nan_to_num(-1.0/(2.0*np.sqrt(edens)) + 2.0*params[0]*edens)
 
-    opti_out = {}
-    targ_out = {}
+    grad = np.empty((X[0].shape[0], len(params)), dtype=float)
+    grad[:, 1:-n_edens] = X[0]                                 # pair
+    grad[:, 0] = np.sum(edens**2, axis=1)                      # embed
+    grad[:, -n_edens:] = np.sum(tmp[:, :, None]*X[1], axis=1)  # edens
 
-    # cycle over target system trajectories and statistics to determine SD
-    for key in targets.keys():
+    return grad
 
-        targ = targets[key]
-        stat = stats[key]
 
-        u_targ = targ['energy'] # target energies
-        u_stat = stat['energy'] # energy statistics
-
-        opti_out[key] = list(utot_func(params, u_stat, hparams))
-        targ_out[key] = list(u_targ)
+def jacobian_energy(params, X, y, weights):
+    """Calculates jacobian of energy loss function"""
     
-    return opti_out, targ_out
+    du = y - energy(params, X)
+    grad = gradient_energy(params, X)
+    jac = -2.0*grad.T.dot(np.diag(weights)).dot(du)
+    
+    return jac
 
-def u_components(all_params, stats):
-    """
-    Calculates configurational energy from EAM sufficient statistics and model parameters
+def jacobian_sd2(params, X, y, weights, bounds, beta):
+    """Calculates jacobian of statistical distance loss function"""
+    
+    # use reduced units beta*energy throughout
+    beta_du = beta*(y - energy(params, X))                    # shape (N,)
+    grad_beta_du = beta[:, np.newaxis]*gradient_energy(params, X)  # shape (N, p)
 
-    Parameters
-    ----------
-    all_params : dict of lists of floats
-             EAM interaction parameters and hperparameters
-    stats : list of lists and floats
-             Sufficient statistics for a trajectory of configurations
+    jac = np.zeros((len(params)), dtype=float)
+    
+    for ib, bound_slice in enumerate(bounds):
+        du = beta_du[bound_slice]               # du (view of the original beta*du)
+        du_ave = np.mean(du)                    # average du
+        exp_duh = np.exp(-0.5*(du - du_ave))    # exp[-beta*du/2]
+        exp_du = exp_duh**2                     # exp[-beta*du]
+        exp_dfi = 1.0/np.mean(exp_du)           # 1/<exp[-beta*du]> = exp(beta*dF)
+        cb = np.mean(exp_duh)*np.sqrt(exp_dfi)  # Bhattacharyya coefficient
+        #print('jac cb', cb)
 
-    Returns
-    -------
-    u_parts: dict of lists of floats
-        components of total energy (+electronic density) for each
-        configuration in trajectory
-    """
+        # Gradient of free energy (with respect to model parameters)
+        # grad_df = <grad_beta_du * exp[-beta*du]> / <exp[-beta*du]>
+        grad_du = grad_beta_du[bound_slice]
+        grad_df = np.mean(grad_du*exp_du[:, None], axis=0)*exp_dfi
+        
+        # Gradient of the Bhattacharyya coeff. shape (p,)
+        # -1/2 * <exp[-beta*du/2] * (grad_beta_du - grad_df)> / exp[-beta*df/2]
+        grad_cb = np.mean((grad_du - grad_df[None, :])*exp_duh[:, None], axis=0)
+        grad_cb *= -0.5*np.sqrt(exp_dfi)
+        
+        # Jacobian
+        jac += -2.0*weights[ib]*np.arccos(cb)/np.sqrt(1.0 - cb**2)*grad_cb
+    
+    return jac
 
-    hparams = all_params['hyperparams']
-    params = all_params['params']
+def jacobian_diff_penalty(params, penalty_mat, alpha):
+    """Jacobian contribution of the B-spline difference penalty"""
+    return alpha*penalty_mat.dot(params)
 
-    ustats = stats['energy']
+def jacobian_energy_penalized(params, X, y, weights, penalty_mat, alpha):
+    jac = jacobian_energy(params, X, y, weights)
+    jac += jacobian_diff_penalty(params, penalty_mat, alpha)
+    return jac
 
-    n_sample = len(ustats)
-
-    # pair interaction coefficients
-    npair = len(hparams['pair']) 
-    hp = params['pair']
-    #print('hp', hp)
-    #print(ustats)#), len(ustats[0][2]))
-
-    # electronic density coefficients. The first coefficient is always 1
-    ndens = len(hparams['edens'])
-    hd = params['edens']
-
-    # embedding function
-    he = params['embed']
-
-    #print('n', n_sample, npair, ndens)
-
-    # pair interactions (per box) from array of spline coefficeints and corresponding statistic
-    # sum over spline components, make array over samples
-    u_pair = np.array([sum([a*s for a, s in zip(hp, ustats[i][2][:])]) for i in range(n_sample)])
-
-    # cycle over samples for manybody interactions
-    embed_r = []
-    embed_2 = []
-    edens = []
-    for i in range(n_sample):
-        # calculate electronic density for each atom
-        # coefficient for the last spline section is 1 by definition
-        # rho_func.shape should be (n_atom, )
-
-        rho_func = sum([p*s for p, s in zip(hd, ustats[i][3][:])]) 
-        #print('type', type(rho_func), rho_func.shape)
-
-        edens.append(np.sum(rho_func)/rho_func.shape[0])
-
-        #assert rho_func.shape[0] == ustats[i][3][0].shape[0], f"rho_func shape {rho_func_shape[0]} does not match number of atoms == ustats shape {ustats[i][2][0].shape[0]}"
-        assert rho_func.shape[0] == ustats[i][3][0].shape[0], "rho_func shape {} does not match number of atoms == ustats shape {}".format(rho_func_shape[0], ustats[i][2][0].shape[0])
-
-        # sum sqrt and squared atom contributions to embedding function
-        embed_r.append(np.sum(np.sqrt(rho_func)))
-        embed_2.append(np.sum(rho_func**2))
-
-
-    u_many = np.array([he[0]*embed_r[i] + he[1]*embed_2[i] for i in range(n_sample)])
-
-    assert u_pair.shape == u_many.shape, "Shapes of u_pair ({}) and u_many ({}) do not match.".format(u_pair.shape, u_many.shape)
-
-    u_total = 0.5*u_pair + u_many
-
-    u_parts = {'u_pair':u_pair, 'edens':edens, 'u_many':u_many, 'u_total': u_total}
-
-    return u_parts
+def jacobian_sd2_penalized(params, X, y, weights, bounds, beta, penalty_mat, alpha):
+    jac = jacobian_sd2(params, X, y, weights, bounds, beta)
+    jac += jacobian_diff_penalty(params, penalty_mat, alpha)
+    return jac
