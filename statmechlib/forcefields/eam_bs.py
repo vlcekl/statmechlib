@@ -25,6 +25,8 @@ def make_input_matrices(target, stats, keytrj=None, combined=0.0):
     # matrix of independent variables (Embedding and B-spline coefficients)
     X0 = []
     X1 = []
+    X2 = []
+
     # vector of dependent variable (configurational energies)
     y = []
     # weights of individual trajectories
@@ -34,7 +36,7 @@ def make_input_matrices(target, stats, keytrj=None, combined=0.0):
     # bounds of trajectories in the overall design matrix
     bounds = []
 
-    keys = list(target.keys())
+    #keys = list(target.keys())
     
     if keytrj is not None:
         keys = keytrj
@@ -221,6 +223,16 @@ def loss_sd2_penalized(params, X, y, weights, bounds, beta, penalty_mat, alpha):
 
     return loss + loss_diff
 
+def loss_sd2f_penalized(params, X, y, weights, bounds, beta, penalty_mat, alpha):
+    """Total sd2 loss with difference penalty"""
+    
+    loss = loss_sd2_forces(params, X, y, weights, bounds, beta)
+    loss_diff = loss_diff_penalty(params, penalty_mat, alpha)
+
+    print(loss + loss_diff, loss, loss_diff)
+
+    return loss + loss_diff
+
 
 def gradient_energy(params, X):
     """Calculates gradient of energy with respect to parameters.
@@ -301,3 +313,126 @@ def jacobian_sd2_penalized(params, X, y, weights, bounds, beta, penalty_mat, alp
     jac = jacobian_sd2(params, X, y, weights, bounds, beta)
     jac += jacobian_diff_penalty(params, penalty_mat, alpha)
     return jac
+
+def make_input_matrices_energy(target, stats, keytrj=None, combined=0.0):
+    """
+    Creates input data for energy minimization with target as dependent variable and stats as independent.
+    Assumes that all appropriate knots from stats have been selected, so it includes everything.
+    """
+    
+    # matrix of independent variables (Embedding and B-spline coefficients)
+    X0 = []
+    X1 = []
+    # vector of dependent variable (configurational energies)
+    y = []
+    # weights of individual trajectories
+    weights = []
+    # vector of inverse temperatures
+    beta = []
+    # bounds of trajectories in the overall design matrix
+    bounds = []
+
+    keys = list(target.keys())
+    
+    if keytrj is not None:
+        keys = keytrj
+    else:
+        keys = list(target.keys())
+
+    max_features = 0
+    max_atoms = 0
+    for key in keys:
+        
+        w = target[key]['weight']
+        
+        # eliminate trajectories with 0 weight
+        if w == 0.0:
+            continue
+
+        lo_bound = len(y)
+        
+        # cycle over samples (configurations)
+
+        for i, (config, energy, bb) in enumerate(zip(stats[key]['energy'], target[key]['energy'], target[key]['beta'])):
+            
+            # add energy
+            y.append(energy)
+            beta.append(bb)
+            #weights.append(w)
+            
+            # create an array of independent variables
+            x_vars = []
+            
+            # embedding for additive model
+            #x_vars += [config[0][0], config[1][0]]
+
+            # pair interactions b-spline stats. Adds a list of descriptors
+            x_vars += list(0.5*config[2])
+            
+            # per atom edens b-spline stats. Adds an array (n_features, n_atoms)
+            xn_vars = config[3]
+            
+            max_features = max(max_features, xn_vars.shape[0])
+            max_atoms = max(max_atoms, xn_vars.shape[1])
+
+            X0.append(x_vars)
+            X1.append(xn_vars)
+            
+        bounds.append(slice(lo_bound, len(y), 1))
+        weights.append(w)
+    
+    if combined > 0.0:
+        # add trajectory of zeros by replicating 'inf'
+        
+        config = stats['inf']['energy'][0]
+        energy = target['inf']['energy'][0]
+        bb = target['inf']['beta'][0]
+        
+        for i in range(200):
+            # add energy
+            y.append(energy)
+            beta.append(bb)
+            #weights.append(w)
+            
+            # create an array of independent variables
+            x_vars = []
+            
+            # embedding for additive model
+            #x_vars += [config[0][0], config[1][0]]
+
+            # pair interactions b-spline stats. Adds a list of descriptors
+            x_vars += list(0.5*config[2])
+            
+            # per atom edens b-spline stats. Adds an array (n_features, n_atoms)
+            xn_vars = config[3]
+            
+            max_features = max(max_features, xn_vars.shape[0])
+            max_atoms = max(max_atoms, xn_vars.shape[1])
+
+            X0.append(x_vars)
+            X1.append(xn_vars)
+            
+        bounds.append(slice(0, len(y), 1))
+        weights.append(combined)
+
+    # Additive features to a 2D array in X[0] 
+    X0 = np.array(X0)
+    X = [X0]
+    
+    # Non-additive features to a 3D array to be filled with density function statistics.
+    # Organize the dimensions as (n_samples, n_atoms, n_features) so that dot product
+    # between edens parameters and the array to compute density on individual atoms
+    # is along the last (contiguous) dimension.
+    X.append(np.zeros((len(X1), max_atoms, max_features), dtype=float))
+    for i in range(len(X1)):
+        X[1][i,:X1[i].shape[1],:] = X1[i].T
+    
+    y = np.array(y)
+    
+    assert len(y) == len(X[0]), "Shapes of y and X[0] do not match"
+    assert len(y) == len(X[1]), "Shapes of y and X[1] do not match."
+    
+    print('bounds', bounds)
+    print('weights', weights)
+
+    return X, y, np.array(weights), np.array(beta), bounds
