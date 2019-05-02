@@ -354,12 +354,6 @@ def sd2_loss(params_test, targets, stats, utot_func, ftot_func=None, dl=0.05, ve
         uuu = beta*(utot_func(params, u_stat, hparams) - u_targ) # array(n_sample)
         uuu -= np.mean(uuu)
         eee = np.exp(-uuu)
-        #print('uuu', uuu)
-        #print('utarg', u_targ)
-        #print('ustat', utot_func(params, u_stat))
-        #print('eee', eee)
-        
-        #print('sd2', utot_EAM(params, u_stat)[0], u_targ[0])
 
         # are we using forces?
         if (not ftot_func) or ('forcesx' not in targ):
@@ -367,7 +361,6 @@ def sd2_loss(params_test, targets, stats, utot_func, ftot_func=None, dl=0.05, ve
             # energy-based free energy difference and statistical distance
             ge = -np.log(np.mean(eee))   # free energy difference (shifted)
             cb = np.mean(np.exp(-0.5*(uuu - ge))) # Bhattacharyya coefficient
-            #print('cb', key, cb)
             sd2 += w*np.arccos(cb)**2              # statistical distance
 
         else:
@@ -375,15 +368,9 @@ def sd2_loss(params_test, targets, stats, utot_func, ftot_func=None, dl=0.05, ve
             betad = beta*dl  # beta * dl
             f_targ = targ['forces'] # target forces (n_sample, 1+6N) (0, 3Nf, -3Nf)
             f_stat = stat['forces'] # force statistics (n_sample, npars, 3N)
-            #print('ftarg', f_targ[-1].shape)
-            #print('fstat', f_stat[-1].shape)
 
             eeh = np.exp(-0.5*uuu)
             fff = ftot_func(params, f_stat) # n_sample *(6N + 1) force contributions
-            #print('s', fff[-1][:])
-            #print('t', f_targ[-1][:])
-            #print('ee', np.mean(np.exp(betad*fff[-1])), eee[-1]*np.mean(np.exp(betad*fff[-1]))) 
-            #print('eall', eee[:])
 
             # target and model force terms
             fpave = np.mean([np.mean(np.exp(betad*f_targ[i])) for i in range(n_sample)])
@@ -396,8 +383,6 @@ def sd2_loss(params_test, targets, stats, utot_func, ftot_func=None, dl=0.05, ve
             if cb > 1: cb = 1
             sd2f += w*np.arccos(cb)**2
 
-            #print('fff', fpave, fqave, fhave, gef, cb, betad)
-    
     if verbose > 0:
         print('loss', sd2+sd2f, sd2, sd2f)
         #print('params', params, type(params))
