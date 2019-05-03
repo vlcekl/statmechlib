@@ -7,3 +7,4 @@ from .penalty import penalty_matrix
 from .eam_bs import make_input_matrices, energy
 from .eam_bs import loss_energy_penalized, jacobian_energy_penalized
 from .eam_bs import loss_sd2_penalized, jacobian_sd2_penalized
+from .eam_bs import loss_sd2f_penalized, make_input_matrices_forces

@@ -94,6 +94,7 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None):#
 
                 # sum contributions to force statistics from all neighbors of i
                 b1[ks, i] = sum([2*f       for f in ff])
+                # ??? Why is the minus sign there below ???
                 br[ks, i] = sum([ -f/np.sqrt(aa) for f in ff])
                 b2[ks, i] = sum([4*f*aa for f in ff])
 

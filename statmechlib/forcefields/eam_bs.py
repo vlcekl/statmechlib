@@ -16,7 +16,7 @@ Collection of EAM functions
 import numpy as np
 
 
-def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0):
+def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0, dl_dict=None):
     """
     Creates input data for energy minimization with target as dependent variable and stats as independent.
     Assumes that all appropriate knots from stats have been selected, so it includes everything.
@@ -31,6 +31,8 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0):
     y = []
     # weights of individual trajectories
     weights = []
+    # force weights
+    dl = []
     # vector of inverse temperatures
     beta = []
     # bounds of trajectories in the overall design matrix
@@ -43,11 +45,17 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0):
     else:
         keys = list(target.keys())
 
+    if dl_dict is None:
+        dl_dict = {key:0.0 for key in keys}
+
     max_features = 0
+    max_force_pars = 0
     max_atoms = 0
+    max_y = 0
     for key in keys:
         
         w = target[key]['weight']
+        fw = dl_dict[key]
         
         # eliminate trajectories with 0 weight
         if w == 0.0:
@@ -67,6 +75,7 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0):
             
             # add energy
             y.append(np.concatenate(([targ_energy], targ_force)))
+            
             beta.append(bb)
             #weights.append(w)
             
@@ -82,34 +91,36 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0):
             X0.append(x_vars)
             
             # per atom edens b-spline stats. Adds an array (n_features, n_atoms)
+            # n_features == n_params
             xn_vars = config[3]
             X1.append(xn_vars)
 
-            # per atom forces
-            #xnn_vars = #flatten forces
-            #force_flat = []
-            #for frc in forces:
-            #    fr = np.concatenate((np.array([0.0]), frc.flatten(), -frc.flatten()))
-            #    force_flat.append(fr)
-#
-#            X2.append(xnn_vars)
+            # forces statistics
+            # per atom b-spline stats. Adds an array (n_features, n_atoms, 3)
+            xnn_vars = stat_force[2]
+            X2.append(xnn_vars)
 
-            max_features = max(max_features, xn_vars.shape[0])
             max_atoms = max(max_atoms, xn_vars.shape[1])
+            max_features = max(max_features, xn_vars.shape[0])
+            max_force_pars = max(max_force_pars, xnn_vars.shape[0])
+            max_y = max(max_y, len(y[-1]))
             
         bounds.append(slice(lo_bound, len(y), 1))
         weights.append(w)
-    
+        dl.append(fw)
+
     if combined > 0.0:
         # add trajectory of zeros by replicating 'inf'
         
         config = stats['inf']['energy'][0]
-        energy = target['inf']['energy'][0]
+        targ_energy = target['inf']['energy'][0]
         bb = target['inf']['beta'][0]
+        stat_force = stats['inf']['forces'][0]
+        targ_force = target['inf']['forces'][0]
         
         for i in range(200):
             # add energy
-            y.append(energy)
+            y.append(np.concatenate(([targ_energy], targ_force)))
             beta.append(bb)
             #weights.append(w)
             
@@ -124,16 +135,23 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0):
             
             # per atom edens b-spline stats. Adds an array (n_features, n_atoms)
             xn_vars = config[3]
+
+            # forces statistics
+            xnn_vars = stat_force[2]
             
-            max_features = max(max_features, xn_vars.shape[0])
             max_atoms = max(max_atoms, xn_vars.shape[1])
+            max_features = max(max_features, xn_vars.shape[0])
+            max_force_pars = max(max_force_pars, xnn_vars.shape[0])
+            max_y = max(max_y, len(y[-1]))
 
             X0.append(x_vars)
             X1.append(xn_vars)
+            X2.append(xnn_vars)
             
         bounds.append(slice(0, len(y), 1))
         weights.append(combined)
-
+        dl.append(0.0)
+    
     # Additive features to a 2D array in X[0] 
     X0 = np.array(X0)
     X = [X0]
@@ -145,16 +163,31 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0):
     X.append(np.zeros((len(X1), max_atoms, max_features), dtype=float))
     for i in range(len(X1)):
         X[1][i,:X1[i].shape[1],:] = X1[i].T
-    
-    y = np.array(y)
-    
-    assert len(y) == len(X[0]), "Shapes of y and X[0] do not match"
-    assert len(y) == len(X[1]), "Shapes of y and X[1] do not match."
-    
-    print('bounds', bounds)
-    print('weights', weights)
 
-    return X, y, np.array(weights), np.array(beta), bounds
+    # Non-additive features to a 3D array to be filled with density function statistics.
+    # Organize the dimensions as (n_samples, n_atoms, n_features) so that dot product
+    # between edens parameters and the array to compute density on individual atoms
+    # is along the last (contiguous) dimension.
+    X.append(np.zeros((len(X2), max_atoms, 3, max_force_pars), dtype=float))
+    for i in range(len(X1)):
+        X[2][i, :X2[i].shape[1], 0:3, :] = np.transpose(X2[i], (1, 2, 0)) 
+    
+    yy = np.zeros((len(y), max_y), dtype=float)
+    for i in range(len(y)):
+        yy[i,:len(y[i])] = y[i]
+
+    #y = np.array(y)
+    
+    assert len(yy) == len(X[0]), "Shapes of y and X[0] do not match"
+    assert len(yy) == len(X[1]), "Shapes of y and X[1] do not match."
+    assert len(yy) == len(X[2]), "Shapes of y and X[2] do not match."
+    
+    #print('bounds', bounds)
+    #print('weights', weights)
+    #print('y.shape', yy.shape)
+    #print('yy',yy[0], yy[800])
+
+    return X, yy, np.array(weights), np.array(beta), np.array(dl), bounds
 
 
 def energy(params, X):
@@ -206,42 +239,47 @@ def loss_sd2(params, X, y, weights, bounds, beta):
 
 def forces_EAM(params, X, bound_slice):
 
+    n_pair = X[0].shape[-1]
     n_edens = X[1].shape[-1]
     
     # Pair energy
-    energy = X[0].dot(params[1:-n_edens])
+    energy = X[0][bound_slice].dot(params[1:-n_edens])
     
     # calculates an (n_samples, n_atoms) matrix of atomic densities
-    edens = X[1].dot(params[-n_edens:])
+    edens = X[1][bound_slice].dot(params[-n_edens:])
+    edens_sqrt = np.sqrt(edens)
 
     # Manybody energy: A*sum(dens**0.5) + B*sum(dens**2)
     # Here we set A to -1 to eliminate colinearity
-    energy += -1.0*np.sum(np.sqrt(edens), axis=1)
+    energy += -1.0*np.sum(edens_sqrt, axis=1)
     energy += params[0]*np.sum(edens**2, axis=1)
 
-    # number of samples and atoms
-    n_sample = len(fstats)
-    
-    # cycle over samples
-    f_total = []
-    for i in range(n_sample):
+    # pair forces (n_sample, n_atom, n_dim, n_params)->(n_sample, n_atom, n_dim)
+    forces = X[2][bound_slice, :, :, 0:n_pair].dot(params[1:-n_edens])
 
-        # pair interactions from array of spline coefficeints and corresponding statistic
-        f_pair = sum([p*s for p, s in zip(params[2:], fstats[i][2][:])]) 
+    # edens grad (n_sample, n_atom, n_dim, n_params)->(n_sample, n_atom, n_dim)
+    forces_edens = X[2][bound_slice, :, :, 0:n_edens].dot(params[-n_edens:])
 
-        # manybody interactions from embedding function parameters and corresponding statistics
-        f_many = params[0]*fstats[i][0][-1] + params[1]*fstats[i][1][-1]
-        
-        n_atom = fstats[i][0][0].shape[0]
-        # Create a 6N + 1 array of 0, f, and -f
-        fx = np.zeros((6*n_atom + 1), dtype=float)
-        fx[1:3*n_atom+1] = 0.5*f_pair.flatten() + f_many.flatten()
-        fx[3*n_atom+1:] = -fx[1:3*n_atom+1]
-        #print('natom', n_atom, type(f_pair), type(f_many), f_pair.shape, f_many.shape)
- 
-        f_total.append(fx)
+    # add manybody forces ->(n_sample, n_atom, n_dim)
+    with np.errstate(divide='ignore'):
+        # (-1) is there for the constant parameter value
+        dens_deriv = np.nan_to_num(-1.0/(2.0*np.sqrt(edens)) + 2.0*params[0]*edens)
 
-    return np.array(f_total)
+    forces += dens_deriv[:,:,None]*forces_edens
+    #forces += (-1/(2*edens_sqrt[:,:,None]) + 2*edens[:,:,None]*params[0])*forces_edens
+
+    n_sample, n_atom, n_dim = forces.shape
+    n_comps = n_atom*n_dim
+
+    forces = np.reshape(forces, (n_sample, -1))
+
+    forces_flat = np.empty((n_sample, 2*n_comps + 1), dtype=float)
+    forces_flat[:, 0] = 0.0
+    forces_flat[:, 1:n_comps+1] =-forces
+    forces_flat[:, n_comps+1:] = +forces
+
+    #return energy, forces_flat
+    return forces_flat
 
 def loss_sd2_forces(params, X, y, weights, bounds, beta, dl):
     """Statistical distance loss including forces
@@ -253,7 +291,7 @@ def loss_sd2_forces(params, X, y, weights, bounds, beta, dl):
     """
 
     # energy differences
-    beta_du = beta*(energy(params, X) - y[:,0])
+    beta_du = beta*(energy(params, X) - y[:, 0])
 
     loss = 0.0
     for ib, bound_slice in enumerate(bounds):
@@ -268,9 +306,20 @@ def loss_sd2_forces(params, X, y, weights, bounds, beta, dl):
             cb /= np.sqrt(np.mean(exp_du))       # Bhattacharyya coeff.: cb/exp[-beta*dF/2]
         else:
             db = dd*beta[bound_slice]
-            f_modl = np.exp(db*forces_EAM(params, X, bound_slice)) # n_sample * (6N + 1) force contributions
-            f_targ = np.exp(db*y[bound_slice, 1:])
+            f_targ = np.exp(db[:, None]*y[bound_slice, 1:])
+            f_modl = np.exp(db[:, None]*forces_EAM(params, X, bound_slice)) # n_sample * (6N + 1) force contributions
 
+            print('targ', y[bound_slice, 1:][0][10:12], forces_EAM(params, X, bound_slice)[0][10:12])
+            print('targ', y[bound_slice, 1:][1][10:12], forces_EAM(params, X, bound_slice)[1][10:12])
+            print('targ', y[bound_slice, 1:][2][10:12], forces_EAM(params, X, bound_slice)[2][10:12])
+            print('targ', y[bound_slice, 1:][3][10:12], forces_EAM(params, X, bound_slice)[3][10:12])
+            print('targ', y[bound_slice, 1:][4][10:12], forces_EAM(params, X, bound_slice)[4][10:12])
+            print('ee')
+            #print('targ', y[bound_slice, 1:][100][10:12], forces_EAM(params, X, bound_slice)[100][10:12])
+            #print('targ', y[bound_slice, 1:][50][0:2], forces_EAM(params, X, bound_slice)[50][0:2])
+            #print('targ', y[bound_slice, 1:][30][50:52], forces_EAM(params, X, bound_slice)[30][50:52])
+            #print('ee')
+            
             fpave = np.mean(f_targ)
             fqave = np.mean(exp_du*np.mean(f_modl, axis=1))
             fhave = np.mean(exp_duh*np.mean(np.sqrt(f_modl*f_targ), axis=1))
@@ -311,10 +360,10 @@ def loss_sd2_penalized(params, X, y, weights, bounds, beta, penalty_mat, alpha):
 
     return loss + loss_diff
 
-def loss_sd2f_penalized(params, X, y, weights, bounds, beta, penalty_mat, alpha):
+def loss_sd2f_penalized(params, X, y, weights, bounds, beta, dl, penalty_mat, alpha):
     """Total sd2 loss with difference penalty"""
     
-    loss = loss_sd2_forces(params, X, y, weights, bounds, beta)
+    loss = loss_sd2_forces(params, X, y, weights, bounds, beta, dl)
     loss_diff = loss_diff_penalty(params, penalty_mat, alpha)
 
     print(loss + loss_diff, loss, loss_diff)
