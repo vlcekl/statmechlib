@@ -11,7 +11,115 @@ import copy
 import numpy as np
 from .pair_dist import pair_dist, pair_dist_cutoff
 
-def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None):#, rmax=None):
+def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, fatoms=[]):#, rmax=None):
+    """
+    Takes atom pair distances and calculates per atom-statistics needed
+    for the parameterization of a cubic spline-based EAM model similar to
+    Marinica (2013), having a full spline representation for electronic
+    density function.
+ 
+    Parameters
+    ----------
+    config: tuple(2)
+            xyz and box information about a particular configuration
+    atom_type: list of int
+            atom type ids
+    sc : python list of floats
+         If not rcut and rmax parameters are given, sc expected to be ordered on a regular grid
+         In this format last three knots will be used as helper knots needed for
+         cubic b-spline definition
+    rcut: float
+        EAM potential cutoff distance
+    fatoms: list
+        list of atom numbers for which forces will be calculated
+
+    Returns
+    -------
+    ar, a1, a2 : numpy arrays (len(sc))
+                 atom energy-related statistics
+                 el_density**0.5, el_density, el_density**2
+    br, b1, b2 : numpy arrays (len(sc), natoms, 3 coordinates)
+                 atom force-related statistics (gradients of energy)
+                 grad(el_density**0.5), grad(el_density), grad(el_density**2)
+    """
+ 
+#    # set rcut to the potential cutoff
+#    if rcut == None:
+#        rcut = sc[-4]
+#
+#    # set rmax to the most distant knot for b-spline definition
+#    if rmax == None:
+#        rmax = sc[-1]
+
+    if rcut == None:
+        rcut = sc[-1]
+
+    xyz = config[0]
+    box = config[1]
+
+    # get pair distances (absolute and Cartesian components)
+    rr, rx = pair_dist_cutoff(xyz, box, rcut)
+
+    # number of atoms in configuration
+    n_atom = rr.shape[0]
+
+    # number of atoms in the replicated box
+    n_neighbor = rr.shape[1]
+    
+    # energy-related statistics
+    ar = np.zeros((len(sc)), dtype=float)  # box statitics for square root part of embedding function
+    a1 = np.zeros_like(ar)                 # box statistics for pair potential
+    a2 = np.zeros_like(ar)                 # box statitics for square part of embedding function
+    ax = np.zeros((len(sc), n_atom), dtype=float) # per atom stats for density function
+    
+    # force-related statistics
+    br = np.zeros((len(sc), n_atom, 3), dtype=float)
+    b1 = np.zeros_like(br)
+    b2 = np.zeros_like(br)
+    zero3 = np.zeros((3), dtype=float)
+    bx = len(sc)*[[]]
+
+    # cycle over spline knots
+    for ks, rc in enumerate(sc):
+
+        # cycle over atoms
+        for i in range(n_atom):
+
+            # sum electronic density over all neighbors of i within rc
+            aa = sum([(rc - r)**3 for r in rr[i] if (r < rcut and r < rc and r > 0.01)])
+            ax[ks, i] = aa
+
+            # if el. density larger than zero, calculate force statistics
+            if aa > 0.0:
+
+                # precompute a list of recurring values for force statistics
+                ff = [3*(rc - r)**2*x/r if (r > 0.01 and r < rc and r < rcut) else zero3 for r, x in zip(rr[i], rx[i])]
+
+                # sum contributions to force statistics from all neighbors of i
+                b1[ks, i] = sum(ff)
+
+                if i in fatoms:
+                    bx[ks].append(ff)
+
+                # ??? Why is the minus sign there below ???
+                #br[ks, i] = sum([0.5*f/np.sqrt(aa) for f in ff])
+                #b2[ks, i] = sum([2*f*aa for f in ff])
+
+        # sum contributions to per box energy statistics for a given spline
+        # knot
+        ar[ks] = np.sum(np.sqrt(ax[ks,:]))
+        a1[ks] = np.sum(ax[ks,:])
+        a2[ks] = np.sum(ax[ks,:]**2)
+
+    # energy correction component (number of particles * density)
+    corr = float(n_atom*n_atom)/np.linalg.det(box)
+    c1 = np.array([corr])
+
+    bx = np.array(bx)
+
+    return a1, ar, a2, ax, b1, br, b2, bx
+
+def get_stats_EAM_per_atom_old(config, atom_type=None, sc=[2., 3., 4.], rcut=None):#, rmax=None):
     """
     Takes atom pair distances and calculates per atom-statistics needed
     for the parameterization of a cubic spline-based EAM model similar to
