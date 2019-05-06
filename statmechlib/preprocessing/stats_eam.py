@@ -99,7 +99,7 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, f
                 b1[ks, i] = sum(ff)
 
                 if i in fatoms:
-                    print('fat', i, len(ff))
+                    #print('fat', i, len(ff))
                     bx[ks].append(ff)
 
                 # ??? Why is the minus sign there below ???
