@@ -77,7 +77,7 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, f
     b1 = np.zeros_like(br)
     b2 = np.zeros_like(br)
     zero3 = np.zeros((3), dtype=float)
-    bx = np.zeros((len(sc), len(fatoms), n_atom, 3), dtype=float)
+    bx = np.zeros((len(sc), len(fatoms), n_neighbor, 3), dtype=float)
 
     # cycle over spline knots
     for ks, rc in enumerate(sc):
@@ -120,7 +120,7 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, f
 
     bx = np.array(bx)
 
-    print('bshape', b1.shape, bx.shape)
+    #print('bshape', b1.shape, bx.shape)
 
     return a1, ar, a2, ax, b1, br, b2, bx
 
