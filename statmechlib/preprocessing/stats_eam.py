@@ -77,12 +77,13 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, f
     b1 = np.zeros_like(br)
     b2 = np.zeros_like(br)
     zero3 = np.zeros((3), dtype=float)
-    bx = len(sc)*[[]]
+    bx = np.zeros((len(sc), len(fatoms), n_atom, 3), dtype=float)
 
     # cycle over spline knots
     for ks, rc in enumerate(sc):
 
         # cycle over atoms
+        fcnt = 0
         for i in range(n_atom):
 
             # sum electronic density over all neighbors of i within rc
@@ -99,8 +100,9 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, f
                 b1[ks, i] = sum(ff)
 
                 if i in fatoms:
-                    #print('fat', i, len(ff))
-                    bx[ks].append(ff)
+                    #print('fat', i, len(ff), len(bx[ks]))
+                    bx[ks, fcnt] = ff
+                    fcnt += 1
 
                 # ??? Why is the minus sign there below ???
                 #br[ks, i] = sum([0.5*f/np.sqrt(aa) for f in ff])
@@ -117,6 +119,8 @@ def get_stats_EAM_per_atom(config, atom_type=None, sc=[2., 3., 4.], rcut=None, f
     c1 = np.array([corr])
 
     bx = np.array(bx)
+
+    print('bshape', b1.shape, bx.shape)
 
     return a1, ar, a2, ax, b1, br, b2, bx
 
