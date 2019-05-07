@@ -26,6 +26,7 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0, dl_dict
     X0 = []
     X1 = []
     X2 = []
+    X3 = []
 
     # vector of dependent variable (configurational energies)
     y = []
@@ -33,6 +34,8 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0, dl_dict
     weights = []
     # force weights
     dl = []
+    # fatoms
+    force_atoms = []
     # vector of inverse temperatures
     beta = []
     # bounds of trajectories in the overall design matrix
@@ -51,11 +54,14 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0, dl_dict
     max_features = 0
     max_force_pars = 0
     max_atoms = 0
+    max_fatoms = 0
+    max_nbrs = 0
     max_y = 0
     for key in keys:
         
         w = target[key]['weight']
         fw = dl_dict[key]
+        fatoms = target[key]['fatoms']
         
         # eliminate trajectories with 0 weight
         if w == 0.0:
@@ -68,6 +74,7 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0, dl_dict
         te = target[key]['energy']
         sf = stats[key]['forces']
         tf = target[key]['forces']
+        print('lens forces', len(sf), len(tf), len(se), len(te))
         be = target[key]['beta']
 
         for i, (config, targ_energy, stat_force, targ_force, bb) in enumerate(zip(se, te, sf, tf, be)):
@@ -100,13 +107,19 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0, dl_dict
             xnn_vars = stat_force[2]
             X2.append(xnn_vars)
 
+            xnnn_vars = stat_force[3]
+            X3.append(xnnn_vars)
+
             max_atoms = max(max_atoms, xn_vars.shape[1])
             max_features = max(max_features, xn_vars.shape[0])
             max_force_pars = max(max_force_pars, xnn_vars.shape[0])
             max_y = max(max_y, len(y[-1]))
+            max_fatoms = max(max_fatoms, xnnn_vars.shape[1])
+            max_nbrs = max(max_nbrs, xnnn_vars.shape[2])
             
         bounds.append(slice(lo_bound, len(y), 1))
         weights.append(w)
+        force_atoms.append(fatoms)
         dl.append(fw)
 
     if combined > 0.0:
@@ -138,19 +151,24 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0, dl_dict
 
             # forces statistics
             xnn_vars = stat_force[2]
+            xnnn_vars = stat_force[3]
             
             max_atoms = max(max_atoms, xn_vars.shape[1])
             max_features = max(max_features, xn_vars.shape[0])
             max_force_pars = max(max_force_pars, xnn_vars.shape[0])
             max_y = max(max_y, len(y[-1]))
+            max_fatoms = max(max_fatoms, xnnn_vars.shape[1])
+            max_nbrs = max(max_nbrs, xnnn_vars.shape[2])
 
             X0.append(x_vars)
             X1.append(xn_vars)
             X2.append(xnn_vars)
+            X3.append(xnnn_vars)
             
         bounds.append(slice(0, len(y), 1))
         weights.append(combined)
         dl.append(0.0)
+        force_atoms.append([])
     
     # Additive features to a 2D array in X[0] 
     X0 = np.array(X0)
@@ -171,6 +189,10 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0, dl_dict
     X.append(np.zeros((len(X2), max_atoms, 3, max_force_pars), dtype=float))
     for i in range(len(X1)):
         X[2][i, :X2[i].shape[1], 0:3, :] = np.transpose(X2[i], (1, 2, 0)) 
+
+    X.append(np.zeros((len(X3), max_fatoms, max_nbrs, 3, max_force_pars), dtype=float))
+    for i in range(len(X1)):
+        X[3][i, :X3[i].shape[1], :X3[i].shape[2], 0:3, :] = np.transpose(X3[i], (1, 2, 3, 0)) 
     
     yy = np.zeros((len(y), max_y), dtype=float)
     for i in range(len(y)):
@@ -181,13 +203,14 @@ def make_input_matrices_forces(target, stats, keytrj=None, combined=0.0, dl_dict
     assert len(yy) == len(X[0]), "Shapes of y and X[0] do not match"
     assert len(yy) == len(X[1]), "Shapes of y and X[1] do not match."
     assert len(yy) == len(X[2]), "Shapes of y and X[2] do not match."
+    assert len(yy) == len(X[3]), "Shapes of y and X[3] do not match."
     
-    #print('bounds', bounds)
+    print('bounds', bounds)
     #print('weights', weights)
     #print('y.shape', yy.shape)
     #print('yy',yy[0], yy[800])
 
-    return X, yy, np.array(weights), np.array(beta), np.array(dl), bounds
+    return X, yy, np.array(weights), np.array(beta), np.array(dl), bounds, force_atoms
 
 
 def energy(params, X):
@@ -237,7 +260,7 @@ def loss_sd2(params, X, y, weights, bounds, beta):
     return loss
 
 
-def forces_EAM(params, X, bound_slice):
+def forces_EAM(params, X, bound_slice, fatoms):
 
     n_pair = X[0].shape[-1]
     n_edens = X[1].shape[-1]
@@ -255,33 +278,55 @@ def forces_EAM(params, X, bound_slice):
     energy += params[0]*np.sum(edens**2, axis=1)
 
     # pair forces (n_sample, n_atom, n_dim, n_params)->(n_sample, n_atom, n_dim)
-    forces = X[2][bound_slice, :, :, 0:n_pair].dot(params[1:-n_edens])
+    #forces = X[2][bound_slice, :, :, 0:n_pair].dot(params[1:-n_edens])
 
-    # edens grad (n_sample, n_atom, n_dim, n_params)->(n_sample, n_atom, n_dim)
-    forces_edens = X[2][bound_slice, :, :, 0:n_edens].dot(params[-n_edens:])
+    n_fatoms = len(fatoms)
+    n_atom = X[2].shape[1]
+    n_replicas = X[3].shape[2]//X[2].shape[1]
+    n_nbrs = n_replicas*n_atom
+    # pair forces (n_sample, n_fatom, n_nbrs, n_dim, n_params)->(n_sample, n_atom, n_dim)
+    # sum over neighbors
+    forces = np.sum(X[3][bound_slice, :n_fatoms, :n_nbrs, :, 0:n_pair].dot(params[1:-n_edens]), axis=2)
+    #print('f1', forces[0,0])
 
-    # add manybody forces ->(n_sample, n_atom, n_dim)
+    # add manybody forces ->(n_sample, n_atom, n_dim) for all atoms
     with np.errstate(divide='ignore'):
         # (-1) is there for the constant parameter value
         dens_deriv = np.nan_to_num(-1.0/(2.0*np.sqrt(edens)) + 2.0*params[0]*edens)
+        # stretch to copies
 
-    forces += dens_deriv[:,:,None]*forces_edens
+    # edens grad (n_sample, n_fatom, n_nbrs, n_dim, n_params)->(n_sample, n_fatom, n_nbrs, n_dim)
+    forces_edens = X[3][bound_slice, :, :, :, 0:n_edens].dot(params[-n_edens:])
+    
+    # density contribution from neighbors
+    nbr_deriv = np.concatenate(n_replicas*[dens_deriv], axis=1)
+    #print('bnd_slice', bound_slice, n_fatoms, forces.shape, nbr_deriv.shape, forces_edens[:, :n_fatoms, :n_replicas*n_atom, :].shape)
+    forces += np.sum(nbr_deriv[:, None, :, None]*forces_edens[:, :n_fatoms, :n_replicas*n_atom, :], axis=2) 
+    #print('f2', forces[0,0])
+
+    # density contribution from fatoms
+    fat_deriv = dens_deriv[:,fatoms]
+    #print('bnd_slice', bound_slice, len(fatoms), forces.shape, fat_deriv.shape, forces_edens[:, :n_fatoms, :n_replicas*n_atom, :].shape)
+    forces += np.sum(fat_deriv[:, :, None, None]*forces_edens[:, :n_fatoms, :n_replicas*n_atom, :], axis=2) 
+    #print('f3', forces[0,0])
+
+    #forces += np.sum(dens_self_deriv[:,:,:,None]*forces_edens, axis=2) 
     #forces += (-1/(2*edens_sqrt[:,:,None]) + 2*edens[:,:,None]*params[0])*forces_edens
 
-    n_sample, n_atom, n_dim = forces.shape
-    n_comps = n_atom*n_dim
+    n_sample, n_fatom, n_dim = forces.shape
+    n_comps = n_fatom*n_dim
 
     forces = np.reshape(forces, (n_sample, -1))
 
     forces_flat = np.empty((n_sample, 2*n_comps + 1), dtype=float)
     forces_flat[:, 0] = 0.0
-    forces_flat[:, 1:n_comps+1] =-forces
+    forces_flat[:, 1:n_comps+1] = -forces
     forces_flat[:, n_comps+1:] = +forces
 
     #return energy, forces_flat
     return forces_flat
 
-def loss_sd2_forces(params, X, y, weights, bounds, beta, dl):
+def loss_sd2_forces(params, X, y, weights, bounds, beta, dl, force_atoms):
     """Statistical distance loss including forces
 
     Parameters
@@ -300,31 +345,25 @@ def loss_sd2_forces(params, X, y, weights, bounds, beta, dl):
         exp_du = np.exp(-(du - du_ave))
         exp_duh = np.sqrt(exp_du)     # exp[-beta*du/2]
         dd = dl[ib]
+        fatoms = force_atoms[ib]
+        n_fatoms = len(fatoms)
 
         if dd == 0.0:
             cb = np.mean(exp_duh)              # cb = <exp[-beta*du/2]>
             cb /= np.sqrt(np.mean(exp_du))       # Bhattacharyya coeff.: cb/exp[-beta*dF/2]
         else:
             db = dd*beta[bound_slice]
-            f_targ = np.exp(db[:, None]*y[bound_slice, 1:])
-            f_modl = np.exp(db[:, None]*forces_EAM(params, X, bound_slice)) # n_sample * (6N + 1) force contributions
+            f_targ = np.exp(db[:, None]*y[bound_slice, 1:2+6*n_fatoms])
+            f_modl = np.exp(db[:, None]*forces_EAM(params, X, bound_slice, fatoms)) # n_sample * (6N + 1) force contributions
+            print('targ', np.sum((y[bound_slice, 1:][0,1:4]-forces_EAM(params, X, bound_slice, fatoms)[0, 1:4])**2))
 
-            print('targ', y[bound_slice, 1:][0][10:12], forces_EAM(params, X, bound_slice)[0][10:12])
-            print('targ', y[bound_slice, 1:][1][10:12], forces_EAM(params, X, bound_slice)[1][10:12])
-            print('targ', y[bound_slice, 1:][2][10:12], forces_EAM(params, X, bound_slice)[2][10:12])
-            print('targ', y[bound_slice, 1:][3][10:12], forces_EAM(params, X, bound_slice)[3][10:12])
-            print('targ', y[bound_slice, 1:][4][10:12], forces_EAM(params, X, bound_slice)[4][10:12])
-            print('ee')
-            #print('targ', y[bound_slice, 1:][100][10:12], forces_EAM(params, X, bound_slice)[100][10:12])
-            #print('targ', y[bound_slice, 1:][50][0:2], forces_EAM(params, X, bound_slice)[50][0:2])
-            #print('targ', y[bound_slice, 1:][30][50:52], forces_EAM(params, X, bound_slice)[30][50:52])
-            #print('ee')
-            
             fpave = np.mean(f_targ)
             fqave = np.mean(exp_du*np.mean(f_modl, axis=1))
             fhave = np.mean(exp_duh*np.mean(np.sqrt(f_modl*f_targ), axis=1))
 
             cb = fhave/(fqave*fpave)**0.5
+            if cb > 1.0:
+                cb = 1.0
 
             #fpave = np.mean([np.mean(np.exp(betad*f_targ[i])) for i in range(n_sample)])
             #fqave = np.mean([eee[i]*np.mean(np.exp(betad*fff[i])) for i in range(n_sample)])
@@ -360,10 +399,10 @@ def loss_sd2_penalized(params, X, y, weights, bounds, beta, penalty_mat, alpha):
 
     return loss + loss_diff
 
-def loss_sd2f_penalized(params, X, y, weights, bounds, beta, dl, penalty_mat, alpha):
+def loss_sd2f_penalized(params, X, y, weights, bounds, beta, dl, force_atoms, penalty_mat, alpha):
     """Total sd2 loss with difference penalty"""
     
-    loss = loss_sd2_forces(params, X, y, weights, bounds, beta, dl)
+    loss = loss_sd2_forces(params, X, y, weights, bounds, beta, dl, force_atoms)
     loss_diff = loss_diff_penalty(params, penalty_mat, alpha)
 
     print(loss + loss_diff, loss, loss_diff)

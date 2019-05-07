@@ -492,7 +492,7 @@ def tpf_to_bsplines(stats_tpf):
             # run through the different energy statistics for the configuration
             # 0:(rho^0.5), 1:(rho^2), 2:rho
             # all per atom with three components
-            for ir, stat in enumerate(conf[0:3]):
+            for ir, stat in enumerate(conf[0:4]):
 
                 # create a new statistics
                 stat_new = []

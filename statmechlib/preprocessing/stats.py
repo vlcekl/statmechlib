@@ -19,7 +19,7 @@ from .utils import universal_eos
 ff_func = {'EAM-cubic-spline':get_stats_EAM_per_atom,
            'Mie':get_stats_Mie}
 
-def force_targ(forces):
+def force_targ(forces, fatoms):
     """
     Creates an array of forces on atoms in all 6N directions (+ and -) along
     with zero forces for the original configuration.
@@ -36,8 +36,8 @@ def force_targ(forces):
     """
 
     force_flat = []
-    for frc in forces:
-        fr = np.concatenate((np.array([0.0]), frc.flatten(), -frc.flatten()))
+    for i, frc in enumerate(forces):
+        fr = np.concatenate((np.array([0.0]), frc[fatoms].flatten(), -frc[fatoms].flatten()))
         force_flat.append(fr)
 
     #return np.array(force_flat)
