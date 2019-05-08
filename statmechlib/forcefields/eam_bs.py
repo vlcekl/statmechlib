@@ -355,7 +355,13 @@ def loss_sd2_forces(params, X, y, weights, bounds, beta, dl, force_atoms):
             db = dd*beta[bound_slice]
             f_targ = np.exp(db[:, None]*y[bound_slice, 1:2+6*n_fatoms])
             f_modl = np.exp(db[:, None]*forces_EAM(params, X, bound_slice, fatoms)) # n_sample * (6N + 1) force contributions
-            print('targ', np.sum((y[bound_slice, 1:][0,1:4]-forces_EAM(params, X, bound_slice, fatoms)[0, 1:4])**2))
+            print('targ', np.sum((y[bound_slice, 1:][2,1:4]-forces_EAM(params, X, bound_slice, fatoms)[2, 1:4])**2))
+            print('targ', y[bound_slice, 1:][0,1:4], forces_EAM(params, X, bound_slice, fatoms)[0, 1:4])
+            print('targ', y[bound_slice, 1:][1,1:4], forces_EAM(params, X, bound_slice, fatoms)[1, 1:4])
+            print('targ', y[bound_slice, 1:][2,1:4], forces_EAM(params, X, bound_slice, fatoms)[2, 1:4])
+            print('targ', y[bound_slice, 1:][3,1:4], forces_EAM(params, X, bound_slice, fatoms)[3, 1:4])
+            print('targ', y[bound_slice, 1:][4,1:4], forces_EAM(params, X, bound_slice, fatoms)[4, 1:4])
+            print('targ', y[bound_slice, 1:][5,1:4], forces_EAM(params, X, bound_slice, fatoms)[5, 1:4])
 
             fpave = np.mean(f_targ)
             fqave = np.mean(exp_du*np.mean(f_modl, axis=1))
