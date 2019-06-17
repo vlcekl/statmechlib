@@ -11,7 +11,55 @@ import os
 import re
 import numpy as np
 import glob
-from collections import defaultdict
+from collections import defaultdict, Counter
+
+def read_hstfile(filename):
+    """
+    Reads lg.hst file with outptu statistics
+
+    Parameters
+    ----------
+    filename: str
+              full path and name of the lg.hst file
+
+    Returns
+    -------
+    traj: dict
+          trajectory information with keys given below
+    atom_name: list of str
+                atom types (names)
+    atom_num: list of ints
+                atom numbers for each type
+    """
+
+    with open(filename, 'r') as fi:
+        enes = [] 
+        hu = []
+
+        ntype = int(re.findall('\S+', fi.readline())[-1])
+
+        # cycle over reference histograms
+        nmax = 0
+        for line in iter(fi.readline, ''):
+            nmax = nmax + 1
+
+            #  energy line
+            sarr = re.findall('\S+', fi.readline())
+            assert abs(float(sarr[-2]) - float(sarr[-1])) < 0.01, "Energies and statistics do not match {} {}".format(float(sarr[2]), float(sarr[3]))
+            enes.append(float(sarr[-1]))
+
+            ustats = []
+            for i in range(1,ntype+1):
+                for j in range(i, ntype+1):
+                    sarr = re.findall('\S+', fi.readline())
+                    ustats.append(int(sarr[-1]))
+
+            hu.append(ustats)
+
+    traj = {'energy':enes, 'interaction_stats':hu}
+
+    return traj
+
 
 def read_histfile(filename):
     """
@@ -75,13 +123,63 @@ def read_runfile(filename):
         enes = [] ; temps = []
         for line in iter(f.readline, ''):
             sarr = re.findall('\S+', line)
-            temps.append(float(sarr[1]))
-            enes.append(float(sarr[2]))
+            enes.append(float(sarr[1]))
+            temps.append(float(sarr[2]))
 
     # combine trajectory data in a dictionary
     traj = {'energy':enes, 'temp':temps}
 
     return traj
+
+def read_xyzfile(filename):
+    """
+    Reads lattice xyz file
+
+    Parameters
+    ----------
+    filename: str
+              full path and name of the xyz file
+
+    Returns
+    -------
+    traj: dict
+          trajectory information with keys given below
+    box: list of 3x3 ndarrays
+          Box dimensions
+    xyz: list of natom x 3 ndarrays
+          Atomic configurations
+    atom_name: list of str
+                atom types (names)
+    atom_num: list of ints
+                atom numbers for each type
+    """
+
+    with open(filename, 'r') as fc:
+
+        xyzs = [] ; boxs = [] ; atom_types = []
+
+        for line in iter(fc.readline, ''):
+            nat = int(re.findall('\S+', line)[0])
+
+            box = np.array(list(map(int, re.findall('\S+', fc.readline())[0:3])))
+            box = np.diag(box)
+
+            # atomic configuration
+            xyz = np.empty((nat, 3), dtype=int)
+            ti = []
+            for i in range(nat):
+                sarr = re.findall('\S+', fc.readline())
+                xyz[i] = [int(x) for x in sarr[1:4]]
+                ti.append(int(sarr[0]))
+
+            atom_types.append(np.array(ti))
+            boxs.append(box)
+            xyzs.append(xyz)
+
+    traj = {'box_latt':boxs, 'xyz_latt':xyzs, 'atom_type':atom_types}
+
+    return traj
+
 
 def read_modeldef(filename):
     """Read configurational energies"""
@@ -107,8 +205,7 @@ def read_modeldef(filename):
 
     return params
 
-
-def read_lattice_model(latt_dir, verbose=False):
+def read_lattice_mc(latt_dir, verbose=False):
     """
     Reads configuration and energy files from a VASP MD simulation in a given directory
     and returns trajectory data in a dictionary.
@@ -128,8 +225,9 @@ def read_lattice_model(latt_dir, verbose=False):
 
     # dict of latt_files and functions to read them
     latt_files = {
-            'lg.hst':read_histfile,
+            'lg.hst':read_hstfile,
             'lg.run':read_runfile,
+            'lg.xyz':read_xyzfile
             }
 
     # data obtained from different files
@@ -142,27 +240,28 @@ def read_lattice_model(latt_dir, verbose=False):
         if os.path.isfile(file_name):
             if verbose:
                 print(f"Reading {file_name}")
-                print("Reading {}".format(file_name))
+                #print("Reading {}".format(file_name))
 
             alldata[name] = read_func(file_name)
         else:
             #print(f'{file_name} not present')
             print('{} not present'.format(file_name))
 
-
-    # Perform consistency checks between data from different VASP files
-
     # Check system composition and trajectory lengths
     if 'lg.hst' in alldata and 'lg.run' in alldata:
         hst_ene = np.array(alldata['lg.hst']['energy'])
         run_ene = np.array(alldata['lg.run']['energy'])
         assert hst_ene.shape == run_ene.shape, 'Trajectory lengths in lg.hst and lg.run do not match'
-        assert np.allclose(hst_ene, run_ene), 'Energies in lg.hst and lg.run do not match'
+        #assert np.allclose(hst_ene, run_ene), 'Energies in lg.hst and lg.run do not match'
+
+    if 'lg.xyz' in alldata and 'lg.run' in alldata:
+        xyz_xyz = np.array(alldata['lg.xyz']['xyz_latt'])
+        run_ene = np.array(alldata['lg.run']['energy'])
+        assert xyz_xyz.shape[0] == run_ene.shape[0], 'Trajectory lengths in lg.xyz and lg.run do not match'
 
     traj = {}
     for key in alldata:
         traj.update(alldata[key])
-
 
     return traj
 
@@ -204,3 +303,4 @@ def write_modeldef(filename, pars):
 
     os.rename(filename, filename+'_old')
     os.rename(filename+'_temp', filename)
+

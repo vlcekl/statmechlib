@@ -174,6 +174,7 @@ def get_chi2_two(key, targ, null, plot=True):
         print(k, i, 'p-value', p_value)
 
 
+
 def get_s2_two(key, targ, null, plot=True):
     """
     first normalizes the hypothesis to have the same counts as target
@@ -199,7 +200,7 @@ def get_s2_two(key, targ, null, plot=True):
 
         df = len(tt) - 1
         p_value = chi2.sf(s2, df)
-        print(key, i, 'p-value', p_value)
+        print(k, i, 'p-value', p_value)
 
 
 def df_geom(params_list, X_list):

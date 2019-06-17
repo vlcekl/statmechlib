@@ -38,7 +38,7 @@ def params_to_pickle(params_dict, params_pickle, option='r+b', protocol=2):#, en
     if option == 'r+b':
         try:
             with open(params_pickle, 'rb') as fi:
-                params_store.extend(pickle.load(fi), encoding=encoding)
+                params_store.extend(pickle.load(fi))#, encoding=encoding)
         except IOError:
             print('No existing params file, creating a new one.')
     

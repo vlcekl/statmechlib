@@ -40,6 +40,7 @@ def cfg_replicate(xyz, box, vec_a=1, vec_b=1, vec_c=1):
 
     return new_xyz, new_box
 
+
 def pair_dist_cutoff(xyz, box, rcut):
     """
     Calculates nearest image pair distances between all atoms in xyz array.
