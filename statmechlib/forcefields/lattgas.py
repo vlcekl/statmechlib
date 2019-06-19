@@ -14,8 +14,7 @@ Collection of lattice gas potential functions
 import numpy as np
 from scipy.stats import chi2
 
-
-def loss_sd2_hist(params, X, beta, params_ref, hist_ref, hist_targ)
+def loss_sd2_hist(params, X, params_ref, beta, hist_ref, hist_targ):
 
     beta_du = beta*X.dot(params - params_ref)
     # histogram reweighting factor
@@ -304,3 +303,40 @@ def average_histogram(params, ref_params_list, X_list, df, hist_list):
     hist_ave = c_hist/c_a
         
     return hist_ave
+ 
+
+def make_input_matrices(X_list, pars_list, pars_select):
+    """Select only the relevant statistics and parameters.
+    """
+
+    X_input = []
+    pars_input = []
+    
+    for X, pars in zip(X_list, pars_list):
+        X_input.append(X[:, pars_select])
+        pars_input.append(pars[pars_select])
+    
+    return X_input, pars_input
+
+ 
+def reference_data(trjs, minval=200):
+    """Converts reference trajectory data into lists of input matrices.
+    Each list item represents one reference trajectory.
+    """
+
+    X_list = []
+    ene_list = []
+    beta_list = []
+    hist_list = []
+    pars_list = []
+    
+    for key, trj in trjs.items():
+        print('trj:', key)
+
+        X_list.append(np.array(trj['interaction_stats'][200:]))
+        beta_list.append(1/np.array(trj['temp'][200:]))
+        ene_list.append(np.array(trj['energy'][200:]))
+        hist_list.append(trj['knn'][200:])
+        pars_list.append(trj['ref_params'])
+        
+    return X_list, beta_list, pars_list, ene_list, hist_list

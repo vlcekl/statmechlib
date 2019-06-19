@@ -181,6 +181,26 @@ def read_xyzfile(filename):
     return traj
 
 
+def read_mldfile(filename):
+    """Read configurational energies"""
+
+    with open(filename, 'r') as f:
+
+        pars = []
+
+        ntypes = int(re.findall('\S+', f.readline())[1])
+        nn_pars = int(re.findall('\S+', f.readline())[1])
+
+        assert nn_pars == ntypes*(ntypes+1)//2, "Wrong number of parameters"
+
+        for _ in range(nn_pars):
+            sarr = re.findall('\S+', f.readline())
+            pars.append(float(sarr[2]))
+
+    params = {'ref_params':np.array(pars)}
+
+    return params
+
 def read_modeldef(filename):
     """Read configurational energies"""
 
@@ -227,7 +247,8 @@ def read_lattice_mc(latt_dir, verbose=False):
     latt_files = {
             'lg.hst':read_hstfile,
             'lg.run':read_runfile,
-            'lg.xyz':read_xyzfile
+            'lg.xyz':read_xyzfile,
+            'lg.mld':read_mldfile
             }
 
     # data obtained from different files
