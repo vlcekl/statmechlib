@@ -15,6 +15,35 @@ import numpy as np
 from scipy.stats import chi2
 
 
+def loss_sd2_hist(params, X, beta, params_ref, hist_ref, hist_targ)
+
+    beta_du = beta*X.dot(params - params_ref)
+    # histogram reweighting factor
+    eee = np.exp(-beta_du + np.max(beta_du))
+    eee /= np.sum(eee)
+
+    hist_ave = average_histogram(pars_in, params_list, X_list[key], df_est[key][0], hist_list[key])
+
+    s2 = 0.0
+    for ref_hist, targ_hist in zip(hist_ref, hist_targ):
+
+        model_hist = np.sum(ref_hist.T*eee, axis=1) # rescaled average reference histogram
+
+        n_nn = np.sum(model_hist)
+        n_tt = np.sum(targ_hist)
+        
+        nn = ref_hist/n_nn
+        tt = targ_hist/n_tt
+        
+        cb = sum([np.sqrt(t*n) for t, n in zip(tt, nn)])
+        s2 += 4*n_nn*n_tt/(n_nn + n_tt)*np.arccos(cb)**2
+
+
+    s2 = np.arccos(cb)**2 
+
+    return loss
+
+
 #def sd2(params, stats, targets):
 def sd2_simple(params, stats, targets):
     """Statistical distance between histograms collected from different
@@ -35,8 +64,8 @@ def sd2_simple(params, stats, targets):
     """
 
     # apply bounds on parameters
-    params = np.where(params < -2.0, -2.0, params)
-    params = np.where(params >  2.0,  2.0, params)
+    params = np.where(params < -10.0, -10.0, params)
+    params = np.where(params >  10.0,  10.0, params)
 
     # nearest and next nearest interactions between unlike particles
     par = np.array([0.0, params[0], 0.0, 0.0, params[1], 0.0])
