@@ -14,33 +14,134 @@ Collection of lattice gas potential functions
 import numpy as np
 from scipy.stats import chi2
 
+def df_geom(params_list, X_list):
+    """Calculates free energy differences between reference systems using geometric estimates.
+    
+    Parameters
+    ----------
+    params_list : list of k ndarrays
+        list of k parameter lists of n_params length for k systems
+    X_list : list of k ndarrays shape(n_samples, n_params)
+        configurational statistics needed for energy computation
+    
+    Returns
+    -------
+    df : ndarray, shape (k, k)
+        pairwise free energy differences
+    """
+    
+    Ktot = len(params_list)
+    
+    # Calculate energy list len(u)=k of ndarrays, shape(n, k)
+    params_mat = np.array(params_list)  # shape (k, p)
+    us = [X.dot(params_mat.T) for X in X_list]
+    
+    #print(np.array([np.mean(X.dot(p)) for p, X in zip(params_list, X_list)]))
+
+    df = np.zeros((Ktot, Ktot), dtype=np.float64)
+    
+    # Create a (k, k) matrices of free energy estimates and Bhattacharyya coefficients
+    for k in range(Ktot):
+        for j in range(k+1, Ktot):
+
+            du_jk = -0.5*(us[k][:, j] - us[k][:, k])
+            du_ave_jk = np.mean(du_jk)
+            du_jk -= du_ave_jk 
+            exp_jk = np.mean(np.sort(np.exp(du_jk)))
+            
+            du_kj = -0.5*(us[j][:, k] - us[j][:, j])
+            du_ave_kj = np.mean(du_kj)
+            du_kj -= du_ave_kj
+            exp_kj = np.mean(np.sort(np.exp(du_kj)))
+            
+            df[k, j] = -(np.log(exp_jk/exp_kj) + (du_ave_jk - du_ave_kj))
+            df[j, k] = -df[k, j]
+        
+    return df
+
+
+def average_histogram(params, ref_params_list, X_list, df, hist_list):
+    """Combines histogram data from different simulations using MBAR"""
+    
+    params_mat = np.array(ref_params_list)  # shape (k, p)
+    # k lists of ndarrays shape(n_k, k)
+    hst = np.concatenate(hist_list, axis=0)
+    X = np.concatenate(X_list, axis=0)
+    us = X.dot(params_mat.T)
+
+    # k lists of ndarrays shape (n_k,) (new energies for all configurations)
+    u_new = X.dot(params[:, None])
+    
+    # Number of samples for each system
+    Ns = np.array([Xi.shape[0] for Xi in X_list])
+
+    us -= u_new
+    us = df - us
+    us_max = np.max(us)
+    us -= us_max
+    
+    sum_k = np.sum(Ns*np.exp(us), axis=1)
+        
+    c_a = np.sum(1.0/sum_k)
+    c_hist = np.sum(hst/sum_k[:, None], axis=0)
+    hist_ave = c_hist/c_a
+        
+    return hist_ave
+
+
+
+def loss_sd2_hist_all(params, X, params_ref, beta, hist_ref, hist_targ):
+
+    s2 = 0.0
+
+    return s2
+
+
 def loss_sd2_hist(params, X, params_ref, beta, hist_ref, hist_targ):
+    """Loss based on a single reference simulation"""
+
+    params = np.where(params < -8.0, -8.0, params)
+    params = np.where(params >  1.0,  1.0, params)
 
     beta_du = beta*X.dot(params - params_ref)
     # histogram reweighting factor
     eee = np.exp(-beta_du + np.max(beta_du))
+    #print(eee[:15], np.sum(eee))
     eee /= np.sum(eee)
+    #print(params - params_ref, eee[:5], np.sum(eee))
 
-    hist_ave = average_histogram(pars_in, params_list, X_list[key], df_est[key][0], hist_list[key])
+    #hist_ave = average_histogram(pars_in, params_list, X_list[key], df_est[key][0], hist_list[key])
 
     s2 = 0.0
-    for ref_hist, targ_hist in zip(hist_ref, hist_targ):
+    # cycle over knn values
+    for i, targ_hist in enumerate(hist_targ):
+        ref_hist = hist_ref[:,i,:,:]
 
-        model_hist = np.sum(ref_hist.T*eee, axis=1) # rescaled average reference histogram
+        #model_hist = np.sum(ref_hist.T*eee, axis=1) # rescaled average reference histogram
+        model_hist = np.sum(eee[:,None, None]*ref_hist, axis=0) # rescaled average reference histogram
 
-        n_nn = np.sum(model_hist)
-        n_tt = np.sum(targ_hist)
+        #n_nn = np.sum(model_hist)
+        #n_tt = np.sum(targ_hist)
+
+        #print(targ_hist)
+        #print(model_hist)
         
-        nn = ref_hist/n_nn
-        tt = targ_hist/n_tt
-        
-        cb = sum([np.sqrt(t*n) for t, n in zip(tt, nn)])
-        s2 += 4*n_nn*n_tt/(n_nn + n_tt)*np.arccos(cb)**2
 
+        #for nn, tt in zip(nnn, ttt): 
+        for j, (nni, tti) in enumerate(zip(model_hist[:], targ_hist[:])): 
+            n_nn = np.sum(nni)
+            n_tt = np.sum(tti)
+            nn = nni/n_nn
+            tt = tti/n_tt
+            print(j)
+            print(nn)
+            print(tt)
+            cb = sum([np.sqrt(t*n) for t, n in zip(tt, nn)])
+            print(cb)
+            s2 += 4*n_nn*n_tt/(n_nn + n_tt)*np.arccos(cb)**2
 
-    s2 = np.arccos(cb)**2 
-
-    return loss
+    print(s2, params)
+    return s2
 
 
 #def sd2(params, stats, targets):
@@ -178,7 +279,6 @@ def sd2(params, stats, targets):
 
 def get_chi2_two(key, targ, null, plot=True):
     """
-    first normalizes the hypothesis to have the same counts as target
     """
         
     ntype = targ.shape[0]
@@ -201,10 +301,8 @@ def get_chi2_two(key, targ, null, plot=True):
         p_value = chi2.sf(chi2_stat, df)
         print(k, i, 'p-value', p_value)
 
-
 def get_s2_two(key, targ, null, plot=True):
     """
-    first normalizes the hypothesis to have the same counts as target
     """
         
     ntype = targ.shape[0]
@@ -230,96 +328,34 @@ def get_s2_two(key, targ, null, plot=True):
         print(key, i, 'p-value', p_value)
 
 
-def df_geom(params_list, X_list):
-    """Calculates free energy differences between reference systems using geometric estimates.
-    
-    Parameters
-    ----------
-    params_list : list of k ndarrays
-        list of k parameter lists of n_params length for k systems
-    X_list : list of k ndarrays shape(n_samples, n_params)
-        configurational statistics needed for energy computation
-    
-    Returns
-    -------
-    df : ndarray, shape (k, k)
-        pairwise free energy differences
+def get_s2_two_old(key, targ, null, plot=True):
     """
-    
-    Ktot = len(params_list)
-    
-    # Calculate energy list len(u)=k of ndarrays, shape(n, k)
-    params_mat = np.array(params_list)  # shape (k, p)
-    us = [X.dot(params_mat.T) for X in X_list]
-    
-    #print(np.array([np.mean(X.dot(p)) for p, X in zip(params_list, X_list)]))
-
-    df = np.zeros((Ktot, Ktot), dtype=np.float64)
-    
-    # Create a (k, k) matrices of free energy estimates and Bhattacharyya coefficients
-    for k in range(Ktot):
-        for j in range(k+1, Ktot):
-
-            du_jk = -0.5*(us[k][:, j] - us[k][:, k])
-            du_ave_jk = np.mean(du_jk)
-            du_jk -= du_ave_jk 
-            exp_jk = np.mean(np.sort(np.exp(du_jk)))
-            
-            du_kj = -0.5*(us[j][:, k] - us[j][:, j])
-            du_ave_kj = np.mean(du_kj)
-            du_kj -= du_ave_kj
-            exp_kj = np.mean(np.sort(np.exp(du_kj)))
-            
-            df[k, j] = -(np.log(exp_jk/exp_kj) + (du_ave_jk - du_ave_kj))
-            df[j, k] = -df[k, j]
-        
-    return df
-
-
-def average_histogram(params, ref_params_list, X_list, df, hist_list):
-    """Combines histogram data from different simulations using MBAR"""
-    
-    params_mat = np.array(ref_params_list)  # shape (k, p)
-    # k lists of ndarrays shape(n_k, k)
-    hst = np.concatenate(hist_list, axis=0)
-    X = np.concatenate(X_list, axis=0)
-    us = X.dot(params_mat.T)
-
-    # k lists of ndarrays shape (n_k,) (new energies for all configurations)
-    u_new = X.dot(params[:, None])
-    
-    # Number of samples for each system
-    Ns = np.array([Xi.shape[0] for Xi in X_list])
-
-    us -= u_new
-    us = df - us
-    us_max = np.max(us)
-    us -= us_max
-    
-    sum_k = np.sum(Ns*np.exp(us), axis=1)
-        
-    c_a = np.sum(1.0/sum_k)
-    c_hist = np.sum(hst/sum_k[:, None], axis=0)
-    hist_ave = c_hist/c_a
-        
-    return hist_ave
- 
-
-def make_input_matrices(X_list, pars_list, pars_select):
-    """Select only the relevant statistics and parameters.
     """
-
-    X_input = []
-    pars_input = []
+        
+    ntype = targ.shape[0]
     
-    for X, pars in zip(X_list, pars_list):
-        X_input.append(X[:, pars_select])
-        pars_input.append(pars[pars_select])
-    
-    return X_input, pars_input
+    for i in range(ntype):
 
- 
-def reference_data(trjs, minval=200):
+        tt = np.array([sum([i*p for i, p in enumerate(targ[i,j,:])]) for j in range(ntype)])
+        nn = np.array([sum([i*p for i, p in enumerate(null[i,j,:])]) for j in range(ntype)])
+        
+        n_nn = np.sum(nn)
+        n_tt = np.sum(tt)
+        
+        print(i, tt, nn/np.sum(nn)*np.sum(tt), np.array(tt) - np.array(nn)/np.sum(nn)*np.sum(tt))
+
+        nn = nn/n_nn
+        tt = tt/n_tt
+        
+        cb = sum([np.sqrt(t*n) for t, n in zip(tt, nn)])
+        s2 = 4*n_nn*n_tt/(n_nn + n_tt)*np.arccos(cb)**2
+
+        df = len(tt) - 1
+        p_value = chi2.sf(s2, df)
+        print(key, i, 'p-value', p_value)
+
+
+def data_lists(trjs, minval=200):
     """Converts reference trajectory data into lists of input matrices.
     Each list item represents one reference trajectory.
     """
@@ -331,12 +367,67 @@ def reference_data(trjs, minval=200):
     pars_list = []
     
     for key, trj in trjs.items():
-        print('trj:', key)
-
-        X_list.append(np.array(trj['interaction_stats'][200:]))
-        beta_list.append(1/np.array(trj['temp'][200:]))
-        ene_list.append(np.array(trj['energy'][200:]))
-        hist_list.append(trj['knn'][200:])
+        X_list.append(np.array(trj['interaction_stats'][minval:]))
+        beta_list.append(1/np.array(trj['temp'][minval:]))
+        ene_list.append(np.array(trj['energy'][minval:]))
+        hist_list.append(trj['knn'][minval:])
         pars_list.append(trj['ref_params'])
         
     return X_list, beta_list, pars_list, ene_list, hist_list
+
+ 
+def make_target_matrices(targets):
+    """Select only the relevant statistics and parameters.
+    """
+
+    k_list = sorted(targets.keys())
+
+    hist_targ = []
+
+    # cycle over KNNs
+    for k in k_list:
+        hist_k = targets[k]
+        # cycle over particle i types
+        ntype = len(hist_k)
+        nn = []
+        for i in range(ntype):
+            nn.append(np.array([sum([i*p for i, p in enumerate(hist_k[i,j,:])]) for j in range(ntype)]))
+
+        hist_targ.append(np.array(nn))  # append (ntype, ntype) matrix
+
+    return np.array(hist_targ)
+
+
+def make_reference_matrices(hist_list, X_list, pars_list, pars_select, knn_max=1):
+    """Select only the relevant statistics and parameters.
+    """
+
+    X_input = []
+    pars_input = []
+    hist_input = []
+    
+    for X, pars, hists in zip(X_list, pars_list, hist_list):
+        X_input.append(X[:, pars_select])
+        pars_input.append(pars[pars_select])
+
+        # cycle over samples
+        hist_sample = []
+        for hists_i in hists:
+            # cycle over KNNs
+            knn = []
+            for hist_k in hists_i[:knn_max]:
+                # cycle over particle i types
+                ntype = len(hist_k)
+                nn = []
+                for i in range(ntype):
+                    nn.append(np.array([sum([i*p for i, p in enumerate(hist_k[i,j,:])]) for j in range(ntype)]))
+
+                knn.append(np.array(nn))  # append (ntype, ntype) matrix
+
+            hist_sample.append(np.array(knn)) # apend (knn, ntype, ntype) matrix for sample i
+
+        hist_input.append(np.array(hist_sample))
+    
+    return X_input, pars_input, hist_input
+
+ 
