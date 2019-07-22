@@ -610,6 +610,7 @@ def make_input_matrices(target, stats, keytrj=None, combined=0.0):
         X[1][i,:X1[i].shape[1],:] = X1[i].T
     
     y = np.array(y)
+    #y = y[:, np.newaxis]
     
     assert len(y) == len(X[0]), "Shapes of y and X[0] do not match"
     assert len(y) == len(X[1]), "Shapes of y and X[1] do not match."

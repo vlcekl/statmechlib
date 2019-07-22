@@ -176,7 +176,7 @@ def get_stats(trj_datasets, ff_form):
     return stats_data
 
 
-def scale_configuration(trj, scale):
+def scale_configuration(trj, scale, system='W'):
     """
     Scales box size by 10 to separate all atoms beyond cutoff, and sets energies and forces to 0.
     
@@ -192,9 +192,9 @@ def scale_configuration(trj, scale):
     """
     trj['box'][0] = trj['box'][0]*scale
     trj['box0'] = trj['box0']*scale
-    trj['energy'][0] = universal_eos(scale)*len(trj['xyz'][0])
-    trj['free_energy'][0] = universal_eos(scale)*len(trj['xyz'][0])
-    trj['total_energy'][0] = universal_eos(scale)*len(trj['xyz'][0])
+    trj['energy'][0] = universal_eos(scale, system)*len(trj['xyz'][0])
+    trj['free_energy'][0] = universal_eos(scale, system)*len(trj['xyz'][0])
+    trj['total_energy'][0] = universal_eos(scale, system)*len(trj['xyz'][0])
     trj['forces'][0] = np.zeros_like(trj['forces'][0])
 
     return trj

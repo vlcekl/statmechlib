@@ -13,6 +13,148 @@ import numpy as np
 import glob
 from collections import defaultdict, Counter
 
+def read_hstfile_ising(filename):
+    """
+    Reads lg.hst file with outptu statistics
+
+    Parameters
+    ----------
+    filename: str
+              full path and name of the lg.hst file
+
+    Returns
+    -------
+    traj: dict
+          trajectory information with keys given below
+    atom_name: list of str
+                atom types (names)
+    atom_num: list of ints
+                atom numbers for each type
+    """
+
+    with open(filename, 'r') as fi:
+        enes = [] 
+        hu = []
+
+        npars = int(re.findall('\S+', fi.readline())[-1])
+
+        # cycle over reference histograms
+        nmax = 0
+        for line in iter(fi.readline, ''):
+            nmax = nmax + 1
+
+            #  energy line
+            sarr = re.findall('\S+', fi.readline())
+            assert abs(float(sarr[-2]) - float(sarr[-1])) < 0.01, "Energies and statistics do not match {} {}".format(float(sarr[2]), float(sarr[3]))
+            enes.append(float(sarr[-1]))
+
+            ustats = []
+            for i in range(npars):
+                sarr = re.findall('\S+', fi.readline())
+                ustats.append(int(sarr[-1]))
+
+            hu.append(ustats)
+
+    traj = {'energy':enes, 'interaction_stats':hu}
+
+    return traj
+
+def read_mldfile_ising(filename):
+    """Read configurational energies"""
+
+    with open(filename, 'r') as f:
+
+        pars = []
+
+        nn_pars = int(re.findall('\S+', f.readline())[1])
+
+        # assert nn_pars == ntypes*(ntypes+1)//2, "Wrong number of parameters"
+
+        for _ in range(nn_pars):
+            sarr = re.findall('\S+', f.readline())
+            pars.append(float(sarr[-1]))
+
+    params = {'ref_params':np.array(pars)}
+
+    return params
+
+def read_runfile_ising(filename):
+    """Read configurational energies"""
+
+    with open(filename, 'r') as f:
+        enes = [] ; temps = [] ; mag = []
+        for line in iter(f.readline, ''):
+            sarr = re.findall('\S+', line)
+            temps.append(float(sarr[1]))
+            enes.append(float(sarr[2]))
+            mag.append(float(sarr[3]))
+
+    # combine trajectory data in a dictionary
+    traj = {'energy':enes, 'temp':temps, 'mag':mag}
+
+    return traj
+
+def read_lattice_ising(latt_dir, verbose=False):
+    """
+    Reads configuration and energy files from a VASP MD simulation in a given directory
+    and returns trajectory data in a dictionary.
+    
+    Parameters
+    ----------
+    latt_dir : string
+              directory with VASP MD simulation data, has to contain XDATCAR and md.out files
+    verbose: bool, default: True
+              If True, print runtime information.
+             
+    Returns
+    -------
+    traj : dictionary
+           trajectory information (configuration, box, energy, forces)
+    """
+
+    # dict of latt_files and functions to read them
+    latt_files = {
+            'lg.hst':read_hstfile_ising,
+            'lg.run':read_runfile_ising,
+            'lg.mld':read_mldfile_ising,
+            'lg.xyz':read_xyzfile
+            }
+
+    # data obtained from different files
+    alldata = {}
+
+    for name, read_func in latt_files.items():
+
+        file_name = os.path.join(latt_dir, name)
+
+        if os.path.isfile(file_name):
+            if verbose:
+                print(f"Reading {file_name}")
+                #print("Reading {}".format(file_name))
+
+            alldata[name] = read_func(file_name)
+        else:
+            #print(f'{file_name} not present')
+            print('{} not present'.format(file_name))
+
+    # Check system composition and trajectory lengths
+    if 'lg.hst' in alldata and 'lg.run' in alldata:
+        hst_ene = np.array(alldata['lg.hst']['energy'])
+        run_ene = np.array(alldata['lg.run']['energy'])
+        assert hst_ene.shape == run_ene.shape, 'Trajectory lengths in lg.hst and lg.run do not match'
+        #assert np.allclose(hst_ene, run_ene), 'Energies in lg.hst and lg.run do not match'
+
+    if 'lg.xyz' in alldata and 'lg.run' in alldata:
+        xyz_xyz = np.array(alldata['lg.xyz']['xyz_latt'])
+        run_ene = np.array(alldata['lg.run']['energy'])
+        assert xyz_xyz.shape[0] == run_ene.shape[0], 'Trajectory lengths in lg.xyz and lg.run do not match'
+
+    traj = {}
+    for key in alldata:
+        traj.update(alldata[key])
+
+    return traj
+
 def read_lattice_pair(latt_dir, verbose=False):
     """
     Reads configuration and energy files from a VASP MD simulation in a given directory

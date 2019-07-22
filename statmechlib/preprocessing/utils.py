@@ -11,7 +11,8 @@ import numpy as np
 import copy
 
 eos_params = {
-    'W': {'l': 0.274, 'r_wse': 1.584, 'eta': 5.69, 'dE': 8.9}
+    'W': {'l': 0.274, 'r_wse': 1.584, 'eta': 5.69, 'dE': 8.9},
+    'Re': {'l': 0.247, 'r_wse': 1.52, 'eta': 6.15, 'dE': 8.03}
 }
 
 
