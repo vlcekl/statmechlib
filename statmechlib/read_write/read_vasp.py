@@ -382,8 +382,8 @@ def read_vasp(vasp_dir, verbose=False):
             'OUTCAR':read_outcar,
             'POSCAR':read_poscar,
             'CONTCAR':read_poscar,
-            'XDATCAR':read_xdatcar,
-            'OSZICAR':read_oszicar,
+            #'XDATCAR':read_xdatcar,
+            #'OSZICAR':read_oszicar,
             'INCAR':read_incar
             }
 
@@ -450,7 +450,7 @@ def read_vasp(vasp_dir, verbose=False):
         traj_len_out = len(alldata['OUTCAR']['energy'])
         traj_len_oszi = len(alldata['OSZICAR']['energy'])
         #assert traj_len_out == traj_len_oszi, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND OSZICAR ({traj_len_oszi}) do not match'
-        assert traj_len_out == traj_len_oszi, 'Trajectory lengths (energy) in OUTCAR ({}) AND XDATCAR ({}) do not match'.format(traj_len_out, traj_len_oszi)
+        assert traj_len_out == traj_len_oszi, 'Trajectory lengths (energy) in OUTCAR ({}) AND OSZICAR ({}) do not match'.format(traj_len_out, traj_len_oszi)
         #traj_len_out = len(alldata['OUTCAR']['total_energy'])
         #traj_len_oszi = len(alldata['OSZICAR']['total_energy'])
         #assert traj_len_out == traj_len_oszi, f'Trajectory lengths in OUTCAR ({traj_len_out}) AND OSZICAR ({traj_len_oszi}) do not match'
